@@ -1,4 +1,22 @@
-# Manual validation: Remote SSH Codespaces serialization (#546)
+# Manual validation harnesses
+
+## Issue #882: Windows ARM64 current-user upgrade observer
+
+`issue-882-windows-upgrade-observe.ps1` is a bounded observer for the reported v0.14.0 to v0.15.0 custom-directory upgrade failure. It records the exact install path's underlying volume GUID and reparse chain, compares that volume with `%TEMP%`, observes Clawd/installer process start and stop events, and snapshots the install tree plus uninstall registry before and after one attempt.
+
+The observer does not launch or stop the target installer/app processes, edit the registry, or change the install tree. Its only durable write is the requested JSON evidence path. That file must not already exist; its pre-created parent must be outside the install directory and have no reparse-point ancestor.
+
+```powershell
+& .\scripts\manual\issue-882-windows-upgrade-observe.ps1 `
+  -InstallDir 'D:\Clawd882\Plain\Clawd on Desk' `
+  -SetupPath 'C:\Clawd882\artifacts\Clawd-on-Desk-Setup-CANDIDATE-arm64.exe' `
+  -OutputPath 'C:\Clawd882\evidence\case-C.json' `
+  -DurationSeconds 180
+```
+
+Start it in a separate PowerShell window after v0.14.0 is installed and Clawd has been exited normally. Trigger only one upgrade attempt while the observer is running. The full matrix, Procmon filters, pass gates, and rollback rules are in `docs/investigations/issue-882-windows-arm64-upgrade.md`.
+
+## Issue #546: Windows OpenSSH + Codespaces stdio
 
 This harness validates the Windows OpenSSH + `gh cs ssh --stdio` boundary that unit tests cannot prove. It creates (or accepts) one exact Codespace, generates an isolated SSH config under a timestamped evidence directory, runs the sequential control and effective-transport checks, then starts the development app with a temporary `USERPROFILE` so the user's real `~/.ssh/config` is not edited.
 
