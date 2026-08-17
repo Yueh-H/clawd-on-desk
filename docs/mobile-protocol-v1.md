@@ -295,6 +295,14 @@ other free-form model text. Snapshots, reconnects, and duplicate upserts do not
 notify. Retraction, authoritative replacement, feature disable, and access reset
 close matching notifications when the browser API permits it.
 
+The default pairing URL uses plaintext `http://<lan-ip>:<port>`. That origin is
+not a secure context in standards-compliant mobile browsers, so Service Workers
+and the Web Notifications API are normally unavailable there. In-page permission
+cards remain the supported notification surface for the default LAN transport;
+system/lock-screen notifications are only a progressive enhancement when the
+browser exposes the required APIs. Enabling notifications for the browser app at
+the operating-system level does not grant those APIs to an insecure site.
+
 ## Settings connection info
 
 The desktop Settings panel reads connection information through Electron IPC.
@@ -305,6 +313,8 @@ ready it reports LAN IP, port, token, and a pairing URL. The public
 ## Limitations and future work
 
 - Plaintext WebSocket; no TLS or cryptographic LAN isolation.
+- The default plaintext LAN origin cannot rely on Service Workers, offline cache,
+  or system notifications; the live in-page card works without those APIs.
 - One global token and one global consent setting; no device roster or
   per-device permission-preview access.
 - Best-effort redaction can miss sensitive content repeated in model prose.
