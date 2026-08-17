@@ -11,16 +11,17 @@ const PRELOAD_SETTINGS = path.join(ROOT, "src", "preload-settings.js");
 const SETTINGS_ACTIONS = path.join(ROOT, "src", "settings-actions.js");
 const SETTINGS_TAB_THEME = path.join(ROOT, "src", "settings-tab-theme.js");
 
-test("main syncs Codex Pet themes before the first theme load", () => {
+test("main guards Codex Pet startup sync before the first theme load in the #813 diagnostic build", () => {
   const source = fs.readFileSync(MAIN, "utf8");
   const runtimeSource = fs.readFileSync(CODEX_PET_MAIN, "utf8");
-  const syncIdx = source.indexOf("let _startupCodexPetSyncSummary = codexPetMain.syncThemes(_requestedThemeId);");
+  const syncIdx = source.indexOf("let _startupCodexPetSyncSummary = ISSUE813_DIAGNOSTIC_BUILD");
   const loadIdx = source.indexOf("const _loadedStartupTheme = themeRuntime.loadInitialTheme(_requestedThemeId");
 
   assert.ok(source.includes('const createCodexPetMain = require("./codex-pet-main");'));
   assert.ok(source.includes("codexPetMain = createCodexPetMain({"));
   assert.ok(runtimeSource.includes('const defaultCodexPetAdapter = require("./codex-pet-adapter");'));
-  assert.ok(syncIdx >= 0, "startup Codex Pet sync should be present");
+  assert.ok(syncIdx >= 0, "diagnostic startup sync guard should be present");
+  assert.ok(source.includes(": codexPetMain.syncThemes(_requestedThemeId);"));
   assert.ok(loadIdx >= 0, "initial theme load should be present");
   assert.ok(syncIdx < loadIdx, "Codex Pet sync must run before loading the selected theme");
   assert.ok(source.includes("codexPetMain.summaryHasActiveOrphan(_startupCodexPetSyncSummary, _requestedThemeId)"));

@@ -1,4 +1,13 @@
 const { app, BrowserWindow, Notification, screen, ipcMain, globalShortcut, nativeTheme, dialog, shell, nativeImage, powerSaveBlocker, powerMonitor, clipboard, safeStorage } = require("electron");
+const issue813Diagnostic = require("./issue-813-diagnostic");
+const ISSUE813_DIAGNOSTIC_BUILD = true;
+issue813Diagnostic.configureEarlyRuntime({
+  app,
+  argv: process.argv,
+  env: process.env,
+  log: console.log,
+});
+issue813Diagnostic.installRuntimeDiagnostics({ app, argv: process.argv, log: console.log });
 // ── Linux/Wayland: relaunch under XWayland so the pet is draggable (issue #441) ──
 // Native Wayland ignores client-side window positioning and blocks global cursor
 // queries, so the pet spawns centered, can't be dragged, and has no tracking;
@@ -797,8 +806,13 @@ const _initialVariantMap = _settingsController.get("themeVariant") || {};
 let _requestedVariantId = _initialVariantMap[_requestedThemeId] || "default";
 const _initialThemeOverrides = _settingsController.get("themeOverrides") || {};
 let _requestedThemeOverrides = _initialThemeOverrides[_requestedThemeId] || null;
-let _startupCodexPetSyncSummary = codexPetMain.syncThemes(_requestedThemeId);
-if (codexPetMain.summaryHasActiveOrphan(_startupCodexPetSyncSummary, _requestedThemeId)) {
+let _startupCodexPetSyncSummary = ISSUE813_DIAGNOSTIC_BUILD
+  ? null
+  : codexPetMain.syncThemes(_requestedThemeId);
+if (
+  !ISSUE813_DIAGNOSTIC_BUILD
+  && codexPetMain.summaryHasActiveOrphan(_startupCodexPetSyncSummary, _requestedThemeId)
+) {
   const orphanThemeId = _requestedThemeId;
   const nextVariantMap = { ...(_settingsController.get("themeVariant") || {}) };
   const nextOverrides = { ...(_settingsController.get("themeOverrides") || {}) };
@@ -843,6 +857,7 @@ if (_loadedStartupTheme._id !== _requestedThemeId || _loadedStartupTheme._varian
 }
 
 // ── Pet window geometry / bounds runtime ──
+let issue813TeardownController = null;
 const petWindowRuntime = createPetWindowRuntime({
   screen,
   isWin,
@@ -880,6 +895,8 @@ const petWindowRuntime = createPetWindowRuntime({
   syncPermissionShortcuts: () => syncPermissionShortcuts(),
   buildTrayMenu: () => buildTrayMenu(),
   buildContextMenu: () => buildContextMenu(),
+  onPetHiddenChanged: (hidden) => issue813TeardownController
+    && issue813TeardownController.onPetHiddenChanged(hidden),
   reapplyMacVisibility: () => reapplyMacVisibility(),
   reassertWinTopmost: () => reassertWinTopmost(),
   scheduleHwndRecovery: () => scheduleHwndRecovery(),
@@ -1637,6 +1654,21 @@ const _permCtx = {
 const _perm = initPermission(_permCtx);
 const { showPermissionBubble, resolvePermissionEntry, sendPermissionResponse, repositionBubbles, permLog, PASSTHROUGH_TOOLS, addPendingPermission, removePendingPermission, isPermissionEntryLive, canAutoResolvePendingPermission, beginSessionTrustConfirmation, endSessionTrustConfirmation, syncPermissionBubbleContent, maybeStartRemoteApproval, clearCodexNotifyBubbles, showCodexUserInputBubble, clearCodexUserInputBubbles, showKimiNotifyBubble, clearKimiNotifyBubbles, syncPermissionShortcuts, replyOpencodeFamilyPermission } = _perm;
 const pendingPermissions = _perm.pendingPermissions;
+issue813TeardownController = issue813Diagnostic.createPetWindowTeardownController({
+  BrowserWindow,
+  getPetWindows: () => [win, hitWin],
+  // Diagnostic startup suppresses the hidden context-menu owner. Therefore
+  // exactly the two pet-owned windows must exist before teardown, and every
+  // other BrowserWindow fails the experiment closed.
+  getAllowedAuxWindows: () => [],
+  getPendingPermissions: () => pendingPermissions,
+  inspectExternalProcesses: () => issue813Diagnostic.inspectExternalClawdProcesses({
+    platform: process.platform,
+    currentPid: process.pid,
+    currentAppImagePath: process.env.APPIMAGE,
+  }),
+  log: console.log,
+});
 let permDebugLog = null; // set after app.whenReady()
 let updateDebugLog = null; // set after app.whenReady()
 let sessionDebugLog = null; // set after app.whenReady()
@@ -3754,17 +3786,19 @@ notifyUpdaterSilentExit = () => { try { updaterOnSilentModeExit(); } catch {} };
 
 // #329: react to the autoUpdateCheck toggle in real time so users see
 // the scheduler start/stop without restarting Clawd.
-try {
-  _settingsController.subscribeKey("autoUpdateCheck", (value) => {
-    try {
-      if (value === false) stopUpdateScheduler();
-      else startUpdateScheduler();
-    } catch (err) {
-      updateLog(`scheduler toggle failed: ${err && err.message}`);
-    }
-  });
-} catch (err) {
-  updateLog(`scheduler subscribeKey failed: ${err && err.message}`);
+if (!ISSUE813_DIAGNOSTIC_BUILD) {
+  try {
+    _settingsController.subscribeKey("autoUpdateCheck", (value) => {
+      try {
+        if (value === false) stopUpdateScheduler();
+        else startUpdateScheduler();
+      } catch (err) {
+        updateLog(`scheduler toggle failed: ${err && err.message}`);
+      }
+    });
+  } catch (err) {
+    updateLog(`scheduler subscribeKey failed: ${err && err.message}`);
+  }
 }
 
 // ── Doctor tab IPC ──
@@ -3995,7 +4029,7 @@ function createWindow() {
 
   buildContextMenu();
   if (!isMac || showTray) createTray();
-  ensureContextMenuOwner();
+  if (!ISSUE813_DIAGNOSTIC_BUILD) ensureContextMenuOwner();
 
   // ── Create input window (hitWin) — small rect over hitbox, receives all pointer events ──
   hitWin = petWindowRuntime.createHitWindow({
@@ -4017,6 +4051,19 @@ function createWindow() {
       mouseOverPet = false;
       petWindowRuntime.reloadWindowWebContents(ownedHitWin, { crashKey: "hitWin", details });
     },
+  });
+
+  issue813Diagnostic.logPetConfiguration({
+    renderWindow: win,
+    hitWindow: hitWin,
+    screen,
+    themeId: _loadedStartupTheme._id,
+    variantId: _loadedStartupTheme._variantId,
+    sizePreference: prefs.size,
+    miniMode: _mini.getMiniMode(),
+    lowPowerIdleMode: prefs.lowPowerIdleMode === true,
+    doNotDisturb,
+    log: console.log,
   });
 
   // Issue #690 plan §4.3.9: these replace (not supplement) the previous
@@ -4109,29 +4156,33 @@ function createWindow() {
   // resolves null when no port could be bound, in which case we skip the sweep.
   // Best-effort: failures fall back to the runtime's own reconnect/backoff and
   // never block startup.
-  startHttpServer().then((port) => {
-    if (port == null) return;
-    const restoredSessionIds = restoreSessionsFromRecoveryLeases(_state, {
-      isAgentEnabled: (agentId) => {
-        const snapshot = { agents: _settingsController.get("agents") };
-        return _isAgentEnabled(snapshot, agentId)
-          && _isAgentIntegrationInstalled(snapshot, agentId);
-      },
-    });
-    if (restoredSessionIds.length > 0) {
-      const recoveredSnapshot = _state.buildSessionSnapshot();
-      reconcilePowerSaveBlocker();
-      broadcastDashboardSessionSnapshot(recoveredSnapshot);
-      broadcastSessionHudSnapshot(recoveredSnapshot);
-      if (!doNotDisturb && !_mini.getMiniMode()) {
-        const recoveredState = resolveDisplayState();
-        applyState(recoveredState, getSvgOverride(recoveredState));
+  if (!ISSUE813_DIAGNOSTIC_BUILD) {
+    startHttpServer().then((port) => {
+      if (port == null) return;
+      const restoredSessionIds = restoreSessionsFromRecoveryLeases(_state, {
+        isAgentEnabled: (agentId) => {
+          const snapshot = { agents: _settingsController.get("agents") };
+          return _isAgentEnabled(snapshot, agentId)
+            && _isAgentIntegrationInstalled(snapshot, agentId);
+        },
+      });
+      if (restoredSessionIds.length > 0) {
+        const recoveredSnapshot = _state.buildSessionSnapshot();
+        reconcilePowerSaveBlocker();
+        broadcastDashboardSessionSnapshot(recoveredSnapshot);
+        broadcastSessionHudSnapshot(recoveredSnapshot);
+        if (!doNotDisturb && !_mini.getMiniMode()) {
+          const recoveredState = resolveDisplayState();
+          applyState(recoveredState, getSvgOverride(recoveredState));
+        }
+        sessionLog(`startup recovery restored sessions=${restoredSessionIds.join(",")}`);
       }
-      sessionLog(`startup recovery restored sessions=${restoredSessionIds.join(",")}`);
-    }
-    try { _remoteSshIpc.connectOnLaunchProfiles(); } catch {}
-  }).catch(() => {});
-  if (_settingsController.get("mobilePreviewEnabled") === true) _lanWss.start();
+      try { _remoteSshIpc.connectOnLaunchProfiles(); } catch {}
+    }).catch(() => {});
+    if (_settingsController.get("mobilePreviewEnabled") === true) _lanWss.start();
+  } else {
+    console.log("Clawd #813 diag3 SIDE-EFFECTS local server, integration sync, permission ingress, remote SSH and mobile preview are disabled");
+  }
   startStaleCleanup();
   // Wait for renderer to be ready before sending initial state
   // If hooks arrived during startup, respect them instead of forcing idle
@@ -4408,7 +4459,9 @@ app.on("open-url", (event, url) => {
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   if (process.argv.includes(REGISTER_PROTOCOL_DEV_ARG)) {
-    const protocolRegistered = codexPetMain.registerProtocolClient();
+    const protocolRegistered = ISSUE813_DIAGNOSTIC_BUILD
+      ? false
+      : codexPetMain.registerProtocolClient();
     console.log(`Clawd: clawd:// dev protocol registration ${protocolRegistered ? "succeeded" : "failed"}`);
   }
   // Another instance is already running — quit silently
@@ -4425,7 +4478,9 @@ if (!gotTheLock) {
     || _initialPrefsLoad.recovered === true
     || _initialPrefsLoad.codexAutoStartAuthoritative === false
   ) ? null : _initialPrefsLoad.snapshot;
-  _syncCodexAutoStartGate(startupGateSnapshot, "startup");
+  if (!ISSUE813_DIAGNOSTIC_BUILD) {
+    _syncCodexAutoStartGate(startupGateSnapshot, "startup");
+  }
   app.on("second-instance", (_event, commandLine) => {
     if (petWindowRuntime.isPetHidden()) {
       prepManualPetVisibility();
@@ -4518,7 +4573,9 @@ if (!gotTheLock) {
       }
     }
 
-    const protocolRegistered = codexPetMain.registerProtocolClient();
+    const protocolRegistered = ISSUE813_DIAGNOSTIC_BUILD
+      ? false
+      : codexPetMain.registerProtocolClient();
     if (process.argv.includes(REGISTER_PROTOCOL_DEV_ARG)) {
       console.log(`Clawd: clawd:// dev protocol registration ${protocolRegistered ? "succeeded" : "failed"}`);
       app.quit();
@@ -4528,28 +4585,34 @@ if (!gotTheLock) {
     // Import system-backed settings (openAtLogin) into prefs on first run.
     // Must run before createWindow() so the first menu draw sees the
     // hydrated value rather than the schema default.
-    hydrateSystemBackedSettings();
+    if (!ISSUE813_DIAGNOSTIC_BUILD) hydrateSystemBackedSettings();
     // First-run only: seed UI language from the device locale, before createWindow
     // so the very first menu/tray render is already in the user's language.
-    hydrateFreshInstallLanguage();
-    try {
-      await initializeRemoteSshInstallationIdentity();
-    } catch (err) {
-      _remoteSshInstallationIdentity = null;
-      console.error("Clawd remote-ssh: installation identity initialization failed:", err && err.message);
+    if (!ISSUE813_DIAGNOSTIC_BUILD) hydrateFreshInstallLanguage();
+    if (!ISSUE813_DIAGNOSTIC_BUILD) {
+      try {
+        await initializeRemoteSshInstallationIdentity();
+      } catch (err) {
+        _remoteSshInstallationIdentity = null;
+        console.error("Clawd remote-ssh: installation identity initialization failed:", err && err.message);
+      }
     }
 
     permDebugLog = path.join(app.getPath("userData"), "permission-debug.log");
     updateDebugLog = path.join(app.getPath("userData"), "update-debug.log");
     sessionDebugLog = path.join(app.getPath("userData"), "session-debug.log");
     focusDebugLog = path.join(app.getPath("userData"), "focus-debug.log");
-    const telegramMigrationInit = initTelegramMigrationController().catch((err) => {
-      console.warn("Clawd: migration controller init failed:", err && err.message);
-      return null;
-    });
-    try { syncDiscordPresence("startup"); }
-    catch (err) { console.warn("Clawd: discord presence startup failed:", err && err.message); }
-    queueFeishuApprovalSync("startup");
+    const telegramMigrationInit = ISSUE813_DIAGNOSTIC_BUILD
+      ? Promise.resolve(null)
+      : initTelegramMigrationController().catch((err) => {
+        console.warn("Clawd: migration controller init failed:", err && err.message);
+        return null;
+      });
+    if (!ISSUE813_DIAGNOSTIC_BUILD) {
+      try { syncDiscordPresence("startup"); }
+      catch (err) { console.warn("Clawd: discord presence startup failed:", err && err.message); }
+      queueFeishuApprovalSync("startup");
+    }
     createWindow();
     void telegramMigrationInit.then((controller) => {
       if (!controller || !telegramMigrationNudge) return;
@@ -4611,44 +4674,50 @@ if (!gotTheLock) {
     // `tutorialSeen` is persisted but deliberately NOT migration-backfilled, so
     // existing users who update also see it once on their next launch, then the
     // flag flips to true forever (any dismissal counts). See prefs.js SCHEMA.
-    try {
-      if (!_settingsController.get("tutorialSeen")) _tutorial.open();
-    } catch (err) {
-      console.warn("Clawd: failed to open first-run tutorial:", err && err.message);
+    if (!ISSUE813_DIAGNOSTIC_BUILD) {
+      try {
+        if (!_settingsController.get("tutorialSeen")) _tutorial.open();
+      } catch (err) {
+        console.warn("Clawd: failed to open first-run tutorial:", err && err.message);
+      }
     }
-    codexPetMain.enqueueImportUrlsFromArgv(process.argv);
-    codexPetMain.flushPendingImportUrls().catch((err) => {
-      console.warn("Clawd: Codex Pet import queue failed:", err && err.message);
-    });
+    if (!ISSUE813_DIAGNOSTIC_BUILD) {
+      codexPetMain.enqueueImportUrlsFromArgv(process.argv);
+      codexPetMain.flushPendingImportUrls().catch((err) => {
+        console.warn("Clawd: Codex Pet import queue failed:", err && err.message);
+      });
+    }
 
     // Register persistent global shortcuts from the validated prefs snapshot.
-    shortcutRuntime.registerPersistentShortcutsFromSettings();
+    if (!ISSUE813_DIAGNOSTIC_BUILD) shortcutRuntime.registerPersistentShortcutsFromSettings();
 
     // Construct log monitors. We always instantiate them so toggling the
     // agent on/off later can call start()/stop() without paying the require
     // cost at click time. Whether we call .start() right now depends on the
     // agent-gate snapshot — a user who disabled Codex at last shutdown
     // shouldn't see its file watcher spin up on the next launch.
-    agentRuntime.startCodexLogMonitor();
+    if (!ISSUE813_DIAGNOSTIC_BUILD) {
+      agentRuntime.startCodexLogMonitor();
 
-    // Auto-install VS Code/Cursor terminal-focus extension
-    try { installTerminalFocusExtension(); } catch (err) {
-      console.warn("Clawd: failed to auto-install terminal-focus extension:", err.message);
+      // Auto-install VS Code/Cursor terminal-focus extension
+      try { installTerminalFocusExtension(); } catch (err) {
+        console.warn("Clawd: failed to auto-install terminal-focus extension:", err.message);
+      }
+
+      // Auto-updater: setup event handlers (user triggers check via tray menu)
+      setupAutoUpdater();
+      // #329: reconcile any stale pending-update entry (e.g. user installed
+      // out-of-band on macOS) and start the background scheduler. Both are
+      // safe in dev mode — reconcile is a no-op when nothing is pending,
+      // and startUpdateScheduler() short-circuits on !app.isPackaged.
+      try { reconcilePendingOnStartup(); } catch (err) { updateLog(`reconcile failed: ${err && err.message}`); }
+      try { startUpdateScheduler(); } catch (err) { updateLog(`scheduler start failed: ${err && err.message}`); }
+
+      // Deferred so any startup Codex hook sync has settled before we read the
+      // on-disk hook state; unref'd so it never blocks a fast quit.
+      const codexHookNudgeTimer = setTimeout(maybeNudgeCodexHookHealth, 4000);
+      if (codexHookNudgeTimer && typeof codexHookNudgeTimer.unref === "function") codexHookNudgeTimer.unref();
     }
-
-    // Auto-updater: setup event handlers (user triggers check via tray menu)
-    setupAutoUpdater();
-    // #329: reconcile any stale pending-update entry (e.g. user installed
-    // out-of-band on macOS) and start the background scheduler. Both are
-    // safe in dev mode — reconcile is a no-op when nothing is pending,
-    // and startUpdateScheduler() short-circuits on !app.isPackaged.
-    try { reconcilePendingOnStartup(); } catch (err) { updateLog(`reconcile failed: ${err && err.message}`); }
-    try { startUpdateScheduler(); } catch (err) { updateLog(`scheduler start failed: ${err && err.message}`); }
-
-    // Deferred so any startup Codex hook sync has settled before we read the
-    // on-disk hook state; unref'd so it never blocks a fast quit.
-    const codexHookNudgeTimer = setTimeout(maybeNudgeCodexHookHealth, 4000);
-    if (codexHookNudgeTimer && typeof codexHookNudgeTimer.unref === "function") codexHookNudgeTimer.unref();
   });
 
   app.on("before-quit", () => {

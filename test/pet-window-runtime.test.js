@@ -155,6 +155,9 @@ function createRuntime(overrides = {}) {
     syncPermissionShortcuts: () => calls.push(["syncPermissionShortcuts"]),
     buildTrayMenu: () => calls.push(["buildTrayMenu"]),
     buildContextMenu: () => calls.push(["buildContextMenu"]),
+    ...(overrides.onPetHiddenChanged
+      ? { onPetHiddenChanged: overrides.onPetHiddenChanged }
+      : {}),
     reapplyMacVisibility: () => calls.push(["reapplyMacVisibility"]),
     ...(overrides.syncImeEditingPetDodge
       ? { syncImeEditingPetDodge: overrides.syncImeEditingPetDodge }
@@ -3147,6 +3150,17 @@ describe("pet-window-runtime setPetHidden contract (#416)", () => {
     assert.equal(h.runtime.isPetHidden(), true);
     h.runtime.togglePetVisibility();
     assert.equal(h.runtime.isPetHidden(), false);
+  });
+
+  it("notifies diagnostics only after real hidden-state changes", () => {
+    const changes = [];
+    const h = createRuntime({ onPetHiddenChanged: (hidden) => changes.push(hidden) });
+
+    h.runtime.setPetHidden(true);
+    h.runtime.setPetHidden(true);
+    h.runtime.setPetHidden(false);
+
+    assert.deepStrictEqual(changes, [true, false]);
   });
 });
 
