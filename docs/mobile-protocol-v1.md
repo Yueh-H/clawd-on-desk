@@ -8,10 +8,12 @@ requests behind a separate, default-off consent setting.
 
 The permission preview contains only a random request ID, agent ID, tool name,
 best-effort-redacted summary, project-folder basename, and the time when the
-desktop bubble content was sent. It does not contain raw tool input, commands,
-queries, prompts, full cwd paths, suggestions, responses, transcripts, or tool
-output. A successful content send does not prove that a person saw the desktop
-bubble.
+desktop bubble content was sent. It does not directly serialize raw tool input,
+command/query fields, prompts, full cwd paths, suggestions, responses,
+transcripts, or tool output. The summary is free text and may paraphrase content
+from those fields, so redaction remains best-effort rather than a secrecy
+guarantee. A successful content send does not prove that a person saw the
+desktop bubble.
 
 Mobile v1 cannot approve or deny a request, answer elicitation, grant session
 trust, focus/control a terminal, or otherwise change desktop or agent state.

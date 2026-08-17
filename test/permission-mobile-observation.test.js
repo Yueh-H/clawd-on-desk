@@ -238,6 +238,23 @@ test("publishes only after successful content sync with an exact frozen safe rec
   assert.strictEqual(snapshot.records[0].presentedAt, firstPresentedAt);
 });
 
+test("every capability-enabled non-Claude adapter reaches the projection", () => {
+  for (const agentId of ["codebuddy", "codex", "qwen-code", "hermes"]) {
+    const harness = createHarness();
+    const { events } = observationEvents(harness.api);
+    harness.api.permissionObservation.setEnabled(true);
+    const entry = addOrdinaryPermission(harness, {
+      agentId,
+      sessionId: `${agentId}-positive`,
+      toolName: "BrandNewRiskyTool",
+    });
+    entry.bubble.finishLoad();
+    const upserts = events.filter((event) => event.type === "upsert");
+    assert.strictEqual(upserts.length, 1, agentId);
+    assert.strictEqual(upserts[0].record.agentId, agentId);
+  }
+});
+
 test("marks while disabled and rebuilds the hidden pending bubble exactly once", () => {
   const harness = createHarness();
   const entry = addOrdinaryPermission(harness);

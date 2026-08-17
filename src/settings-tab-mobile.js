@@ -194,6 +194,12 @@
             confirmed: true,
             resetAccess: choice === "reset",
           }).then(function(result) {
+            // Token reset is an irreversible pre-commit phase. Even if the
+            // later preference write fails (and no settings change event is
+            // emitted), immediately replace the stale QR/URL/token display.
+            if (result && result.tokenReset === true && infoContainer) {
+              renderConnectionInfo(infoContainer);
+            }
             if (result && result.status !== "ok" && result.tokenReset && result.rePairRequired) {
               return Object.assign({}, result, {
                 message: (t("mobilePermissionTokenResetFailure") || "The token was reset, but enabling failed. Re-pair devices. ")

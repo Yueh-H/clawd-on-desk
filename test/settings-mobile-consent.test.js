@@ -25,6 +25,7 @@ class FakeElement {
 
 test("mobile consent surfaces token-reset phase failure in the command error", async () => {
   const switchConfigs = new Map();
+  let connectionInfoReads = 0;
   const settingsAPI = {
     command: async (_name, payload) => ({
       status: "error",
@@ -32,6 +33,16 @@ test("mobile consent surfaces token-reset phase failure in the command error", a
       tokenReset: payload.resetAccess === true,
       rePairRequired: payload.resetAccess === true,
     }),
+    getMobileConnectionInfo: async () => {
+      connectionInfoReads++;
+      return {
+        status: "ok",
+        port: 23334,
+        token: `token-${connectionInfoReads}`,
+        lanIp: "192.0.2.10",
+        pairUrl: `http://192.0.2.10:23334/mobile/?token=token-${connectionInfoReads}`,
+      };
+    },
   };
   const context = vm.createContext({
     console,
@@ -67,6 +78,8 @@ test("mobile consent surfaces token-reset phase failure in the command error", a
   };
   context.ClawdSettingsTabMobile.init(core);
   context.ClawdSettingsTabMobile.renderChannelBody(new FakeElement());
+  await Promise.resolve();
+  assert.strictEqual(connectionInfoReads, 1);
 
   const config = switchConfigs.get("mobilePermissionPreviewEnabled");
   assert.ok(config, "permission child switch should be rendered");
@@ -75,5 +88,6 @@ test("mobile consent surfaces token-reset phase failure in the command error", a
   assert.strictEqual(result.tokenReset, true);
   assert.match(result.message, /TOKEN RESET — RE-PAIR/);
   assert.match(result.message, /disk full/);
+  await Promise.resolve();
+  assert.strictEqual(connectionInfoReads, 2, "reset failure must refresh stale pairing data");
 });
-
