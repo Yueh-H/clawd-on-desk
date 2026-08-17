@@ -3006,7 +3006,7 @@ function handleDecide(event, behavior) {
         perm,
         "deny",
         "Invalid suggestion index",
-        resolutionOptions("cancelled", false)
+        resolutionOptions("resolved", true)
       );
       return;
     }

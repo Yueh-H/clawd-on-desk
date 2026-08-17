@@ -505,3 +505,25 @@ test("terminal handoff stays undecided and post-presentation automation resolves
     [{ reason: "resolved", decided: true }]
   );
 });
+
+test("invalid desktop suggestion index records the explicit deny as decided", () => {
+  const harness = createHarness();
+  const { events } = observationEvents(harness.api);
+  harness.api.permissionObservation.setEnabled(true);
+  const entry = addOrdinaryPermission(harness, { sessionId: "invalid-suggestion" });
+  entry.bubble.finishLoad();
+  events.length = 0;
+
+  harness.api.handleDecide(
+    { sender: { __window: entry.bubble } },
+    "suggestion:99"
+  );
+
+  assert.deepStrictEqual(
+    events.map(({ reason, decided }) => ({ reason, decided })),
+    [{ reason: "resolved", decided: true }]
+  );
+  assert.strictEqual(entry.res.statusCode, 200);
+  assert.match(entry.res.body, /"behavior":"deny"/);
+  assert.match(entry.res.body, /Invalid suggestion index/);
+});
