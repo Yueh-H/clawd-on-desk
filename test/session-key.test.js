@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const {
   LOCAL_SESSION_PROFILE_ID,
   makeSessionKey,
+  parseSessionKey,
   resolveSessionIdentity,
 } = require("../src/session-key");
 
@@ -25,6 +26,25 @@ test("same raw session id in two remote profiles produces opaque collision-free 
   assert.match(a, /^s1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
   assert.equal(a.includes("same::raw"), false);
   assert.equal(a.includes("profile_a"), false);
+});
+
+test("profile-qualified session keys round-trip to their original identity", () => {
+  const sessionId = makeSessionKey({
+    profileId: LOCAL_SESSION_PROFILE_ID,
+    rawSessionId: "codex:019e115a-4df2-7ed0-b90e-8e6345aca777",
+  });
+  assert.deepEqual(parseSessionKey(sessionId), {
+    profileId: LOCAL_SESSION_PROFILE_ID,
+    rawSessionId: "codex:019e115a-4df2-7ed0-b90e-8e6345aca777",
+    sessionId,
+  });
+});
+
+test("session key parsing rejects malformed and non-canonical values", () => {
+  assert.equal(parseSessionKey(null), null);
+  assert.equal(parseSessionKey("s1.bad"), null);
+  assert.equal(parseSessionKey("s1.bG9jYWw.%%%"), null);
+  assert.equal(parseSessionKey("s2.bG9jYWw.dGhyZWFkLTE"), null);
 });
 
 test("session identity preserves raw id strictly for display", () => {

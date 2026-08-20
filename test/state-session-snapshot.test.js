@@ -657,6 +657,26 @@ describe("state-session-snapshot builder", () => {
     assert.strictEqual(byId.get("codex:019e115a-4df2-7ed0-b90e-8e6345aca777").codexSource, "vscode");
   });
 
+  it("recovers a Codex Desktop focus target from a profile-qualified session key", () => {
+    const rawSessionId = "codex:019e115a-4df2-7ed0-b90e-8e6345aca777";
+    const id = makeSessionKey({ profileId: "local", rawSessionId });
+    const snapshot = buildSessionSnapshot(new Map([
+      [id, session("working", {
+        agentId: "codex",
+        rawSessionId: id,
+        codexOriginator: "Codex Desktop",
+        codexSource: "vscode",
+      })],
+    ]), { focusHostPlatform: "darwin" });
+
+    assert.strictEqual(snapshot.sessions[0].id, id);
+    assert.strictEqual(snapshot.sessions[0].canFocus, true);
+    assert.deepStrictEqual(snapshot.sessions[0].focusTarget, {
+      type: "codex-thread",
+      url: "codex://threads/019e115a-4df2-7ed0-b90e-8e6345aca777",
+    });
+  });
+
   it("downgrades Codex Desktop focus targets on Windows snapshots", () => {
     const snapshot = buildSessionSnapshot(new Map([
       ["codex:019e115a-4df2-7ed0-b90e-8e6345aca777", session("working", {

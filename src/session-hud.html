@@ -113,6 +113,10 @@ body { padding: 2px 3px 8px; }
   cursor: default;
 }
 
+.row-focusable {
+  cursor: pointer;
+}
+
 .row:hover {
   background: rgba(0, 0, 0, 0.06);
 }
@@ -171,6 +175,27 @@ body { padding: 2px 3px 8px; }
   height: 16px;
   flex: 0 0 auto;
   object-fit: contain;
+}
+
+.agent-name {
+  max-width: 96px;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(107, 114, 128, 0.11);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .agent-name {
+    background: rgba(161, 161, 170, 0.14);
+  }
 }
 
 .title {

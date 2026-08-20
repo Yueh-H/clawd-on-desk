@@ -181,10 +181,19 @@ describe("session HUD visual shell", () => {
 
   it("marks non-focusable HUD sessions without attempting terminal focus", () => {
     assert.match(sessionHudHtml, /\.row-unfocusable\s*\{[\s\S]*cursor:\s*default;[\s\S]*\}/);
+    assert.match(sessionHudHtml, /\.row-focusable\s*\{[\s\S]*cursor:\s*pointer;[\s\S]*\}/);
     assert.match(sessionHudHtml, /\.focus-unavailable\s*\{[\s\S]*width:\s*13px;[\s\S]*\}/);
     assert.match(sessionHudRenderer, /session\.canFocus\s*===\s*true/);
     assert.match(sessionHudRenderer, /row\.classList\.add\("row-unfocusable"\)/);
+    assert.match(sessionHudRenderer, /row\.addEventListener\("dblclick"/);
     assert.match(sessionHudRenderer, /window\.sessionHudAPI\.focusSession\(session\.id\);/);
+  });
+
+  it("shows the resolved agent name in each compact row", () => {
+    assert.match(sessionHudHtml, /\.agent-name\s*\{[\s\S]*max-width:\s*96px;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*\}/);
+    assert.match(sessionHudRenderer, /function agentLabelFor\(session\)/);
+    assert.match(sessionHudRenderer, /agentName\.className = "agent-name"/);
+    assert.match(sessionHudRenderer, /agentName\.textContent = agentLabel/);
   });
 
   it("renders transient feedback inline instead of covering fixed-height rows", () => {
@@ -220,10 +229,10 @@ describe("session HUD visual shell", () => {
   });
 
   it("uses a compact HUD-only title without mutating the full session title", () => {
-    assert.match(sessionHudRenderer, /HUD_TITLE_MAX_UNITS\s*=\s*15/);
+    assert.match(sessionHudRenderer, /HUD_TITLE_MAX_UNITS\s*=\s*32/);
     assert.match(sessionHudRenderer, /function shortenHudTitle\(value\)/);
     assert.match(sessionHudRenderer, /title\.textContent = feedbackText \|\| shortTitle/);
-    assert.match(sessionHudRenderer, /title\.title = fullTitle/);
+    assert.match(sessionHudRenderer, /title\.title = canFocus/);
   });
 
   it("updates elapsed labels without rebuilding animated rows every second", () => {

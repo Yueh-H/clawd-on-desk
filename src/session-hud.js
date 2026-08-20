@@ -11,15 +11,15 @@ const isMac = process.platform === "darwin";
 const isWin = process.platform === "win32";
 
 const HUD_BORDER_Y = 2;
-const HUD_WIDTH = 240;
-const HUD_WIDTH_COMPACT = 190;
-const HUD_WIDTH_LABELS = 320;
-const HUD_WIDTH_LABELS_COMPACT = 260;
+const HUD_WIDTH = 360;
+const HUD_WIDTH_COMPACT = 310;
+const HUD_WIDTH_LABELS = 460;
+const HUD_WIDTH_LABELS_COMPACT = 400;
 const HUD_CONTEXT_USAGE_WIDTH_BUMP = 36;
 const HUD_LABELS_ONLY_WIDTH_TRIM = 36;
 const HUD_ROW_HEIGHT = 28;
-const HUD_MAX_EXPANDED_ROWS = 3;
-const HUD_MAX_EXPANDED_ROWS_LABELS = 5;
+const HUD_MAX_EXPANDED_ROWS = 6;
+const HUD_MAX_EXPANDED_ROWS_LABELS = 8;
 const HUD_HEIGHT = HUD_ROW_HEIGHT + HUD_BORDER_Y;
 const HUD_WINDOW_SHELL = Object.freeze({
   top: 2,

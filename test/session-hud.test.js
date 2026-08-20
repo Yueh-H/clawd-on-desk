@@ -82,6 +82,7 @@ describe("session HUD geometry", () => {
   });
 
   it("keeps the visible HUD card above the pet hitbox with a fixed gap when flipped", () => {
+    const expectedX = 360 - constants.HUD_WIDTH / 2;
     const result = computeSessionHudBounds({
       hitRect: { left: 320, top: 520, right: 400, bottom: 590 },
       workArea: { x: 0, y: 0, width: 800, height: 620 },
@@ -89,13 +90,13 @@ describe("session HUD geometry", () => {
 
     assert.strictEqual(result.flippedAbove, true);
     assert.deepStrictEqual(result.contentBounds, {
-      x: 240,
+      x: expectedX,
       y: 520 - constants.HUD_HEIGHT - constants.HUD_PET_GAP,
       width: constants.HUD_WIDTH,
       height: constants.HUD_HEIGHT,
     });
     assert.deepStrictEqual(result.bounds, {
-      x: 240 - constants.HUD_WINDOW_SHELL.left,
+      x: expectedX - constants.HUD_WINDOW_SHELL.left,
       y: 520 - constants.HUD_HEIGHT - constants.HUD_PET_GAP - constants.HUD_WINDOW_SHELL.top,
       width: constants.HUD_WIDTH + constants.HUD_WINDOW_SHELL.left + constants.HUD_WINDOW_SHELL.right,
       height: constants.HUD_HEIGHT + constants.HUD_WINDOW_SHELL.top + constants.HUD_WINDOW_SHELL.bottom,
@@ -105,12 +106,12 @@ describe("session HUD geometry", () => {
   it("uses a stable anchor rect instead of the dynamic hitbox when available", () => {
     const result = computeSessionHudBounds({
       hitRect: { left: 260, top: 50, right: 460, bottom: 220 },
-      anchorRect: { left: 100, top: 80, right: 200, bottom: 160 },
+      anchorRect: { left: 500, top: 80, right: 600, bottom: 160 },
       workArea: { x: 0, y: 0, width: 800, height: 600 },
     });
 
     assert.deepStrictEqual(result.contentBounds, {
-      x: 150 - Math.round(constants.HUD_WIDTH / 2),
+      x: 550 - Math.round(constants.HUD_WIDTH / 2),
       y: 160 + constants.HUD_PET_GAP,
       width: constants.HUD_WIDTH,
       height: constants.HUD_HEIGHT,
@@ -213,7 +214,7 @@ describe("session HUD geometry", () => {
     const widthScale = getHudWidthScale(scale);
     const hitRect = { left: 100, top: 80, right: 260, bottom: 240 };
     const workArea = { x: 0, y: 0, width: 2000, height: 1200 };
-    const width = constants.HUD_WIDTH_LABELS + constants.HUD_CONTEXT_USAGE_WIDTH_BUMP; // 356
+    const width = constants.HUD_WIDTH_LABELS + constants.HUD_CONTEXT_USAGE_WIDTH_BUMP;
 
     const scaled = computeSessionHudBounds({ hitRect, workArea, width, scale, widthScale });
     const pad = Math.round(constants.HOT_ZONE_PAD * scale);
@@ -242,6 +243,18 @@ describe("session HUD geometry", () => {
 });
 
 describe("session HUD layout", () => {
+  it("keeps renderer row caps aligned with main-process window geometry", () => {
+    const rendererSource = fs.readFileSync(
+      path.join(__dirname, "..", "src", "session-hud-renderer.js"),
+      "utf8"
+    );
+    for (const key of ["HUD_MAX_EXPANDED_ROWS", "HUD_MAX_EXPANDED_ROWS_LABELS"]) {
+      const match = rendererSource.match(new RegExp(`const ${key} = (\\d+);`));
+      assert.ok(match, `${key} should be declared in the HUD renderer`);
+      assert.strictEqual(Number(match[1]), constants[key], `${key} must match the main process`);
+    }
+  });
+
   it("expands sessions up to the cap without folding", () => {
     const sessions = [
       mkSession("a"),
@@ -255,23 +268,25 @@ describe("session HUD layout", () => {
     assert.strictEqual(rowCount, 3);
   });
 
-  it("folds sessions beyond the 5-row label cap", () => {
+  it("folds sessions beyond the state-label row cap", () => {
     const sessions = [];
     const orderedIds = [];
-    for (let i = 0; i < 7; i++) {
+    const total = constants.HUD_MAX_EXPANDED_ROWS_LABELS + 2;
+    for (let i = 0; i < total; i++) {
       sessions.push(mkSession(`s${i}`));
       orderedIds.push(`s${i}`);
     }
     const { expanded, folded, rowCount } = computeHudLayout({ sessions, orderedIds });
     assert.strictEqual(expanded.length, constants.HUD_MAX_EXPANDED_ROWS_LABELS);
-    assert.strictEqual(folded.length, 7 - constants.HUD_MAX_EXPANDED_ROWS_LABELS);
+    assert.strictEqual(folded.length, 2);
     assert.strictEqual(rowCount, constants.HUD_MAX_EXPANDED_ROWS_LABELS + 1);
   });
 
-  it("folds sessions beyond the 3-row cap when state labels are hidden", () => {
+  it("folds sessions beyond the compact row cap when state labels are hidden", () => {
     const sessions = [];
     const orderedIds = [];
-    for (let i = 0; i < 5; i++) {
+    const total = constants.HUD_MAX_EXPANDED_ROWS + 2;
+    for (let i = 0; i < total; i++) {
       sessions.push(mkSession(`s${i}`));
       orderedIds.push(`s${i}`);
     }
@@ -280,21 +295,17 @@ describe("session HUD layout", () => {
       { showStateLabels: false }
     );
     assert.strictEqual(expanded.length, constants.HUD_MAX_EXPANDED_ROWS);
-    assert.strictEqual(folded.length, 5 - constants.HUD_MAX_EXPANDED_ROWS);
+    assert.strictEqual(folded.length, 2);
     assert.strictEqual(rowCount, constants.HUD_MAX_EXPANDED_ROWS + 1);
   });
 
   it("respects orderedIds for picking the expanded set (most recent first)", () => {
-    const sessions = [
-      mkSession("old"),
-      mkSession("newest"),
-      mkSession("middle"),
-      mkSession("oldest"),
-    ];
-    const orderedIds = ["newest", "middle", "old", "oldest"];
+    const total = constants.HUD_MAX_EXPANDED_ROWS + 1;
+    const orderedIds = Array.from({ length: total }, (_value, index) => `s${index}`);
+    const sessions = orderedIds.slice().reverse().map((id) => mkSession(id));
     const { expanded, folded } = computeHudLayout({ sessions, orderedIds }, { showStateLabels: false });
-    assert.deepStrictEqual(expanded.map((s) => s.id), ["newest", "middle", "old"]);
-    assert.deepStrictEqual(folded.map((s) => s.id), ["oldest"]);
+    assert.deepStrictEqual(expanded.map((s) => s.id), orderedIds.slice(0, -1));
+    assert.deepStrictEqual(folded.map((s) => s.id), orderedIds.slice(-1));
   });
 
   it("excludes headless sessions from both expanded and folded counts", () => {

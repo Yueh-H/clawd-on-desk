@@ -2,9 +2,9 @@
 
 const { canOfferLocalFolder, focusUnavailableReasonKey } = globalThis.ClawdSessionFocusUnavailable;
 
-const HUD_MAX_EXPANDED_ROWS = 3;
-const HUD_MAX_EXPANDED_ROWS_LABELS = 5;
-const HUD_TITLE_MAX_UNITS = 15;
+const HUD_MAX_EXPANDED_ROWS = 6;
+const HUD_MAX_EXPANDED_ROWS_LABELS = 8;
+const HUD_TITLE_MAX_UNITS = 32;
 const RECENT_DONE_UNREAD_MS = 60 * 1000;
 const SESSION_ACTION_FEEDBACK_MS = 4000;
 
@@ -60,6 +60,11 @@ function formatTokenCount(value) {
 
 function titleFor(session) {
   return session.displayTitle || session.sessionTitle || session.id || "";
+}
+
+function agentLabelFor(session) {
+  const label = session && (session.agentName || session.agentId);
+  return String(label || t("dashboardUnknownAgent")).trim() || t("dashboardUnknownAgent");
 }
 
 function titleUnits(value) {
@@ -259,6 +264,9 @@ function createRowForSession(session, now) {
   if (!canFocus) {
     row.classList.add("row-unfocusable");
     row.title = focusUnavailableTooltip(session);
+  } else {
+    row.classList.add("row-focusable");
+    row.title = t("sessionHudDoubleClickToFocus");
   }
 
   const left = document.createElement("div");
@@ -285,6 +293,13 @@ function createRowForSession(session, now) {
     left.appendChild(sourceMarker);
   }
 
+  const agentName = document.createElement("span");
+  const agentLabel = agentLabelFor(session);
+  agentName.className = "agent-name";
+  agentName.textContent = agentLabel;
+  agentName.title = agentLabel;
+  left.appendChild(agentName);
+
   const title = document.createElement("span");
   const fullTitle = titleFor(session);
   const shortTitle = shortenHudTitle(fullTitle);
@@ -294,20 +309,28 @@ function createRowForSession(session, now) {
     title.title = feedbackText;
     title.setAttribute("aria-live", "polite");
   } else if (shortTitle && shortTitle !== fullTitle) {
-    title.title = fullTitle;
+    title.title = canFocus
+      ? `${fullTitle}\n${t("sessionHudDoubleClickToFocus")}`
+      : fullTitle;
   }
   left.appendChild(title);
+  row.setAttribute(
+    "aria-label",
+    `${agentLabel} · ${fullTitle} · ${row.title}`
+  );
 
   const showElapsed = snapshot.hudShowElapsed !== false;
   const right = document.createElement("span");
   right.className = "right";
   let hasRightContent = false;
+  let completionBell = null;
 
   if (!feedbackText && session.badge === "done" && unreadSessions.has(session.id)) {
     const bell = document.createElement("span");
     bell.className = "completion-bell unread-bell";
     bell.innerHTML = BELL_SVG;
     right.appendChild(bell);
+    completionBell = bell;
     hasRightContent = true;
 
   }
@@ -389,21 +412,36 @@ function createRowForSession(session, now) {
   row.appendChild(left);
   if (hasRightContent) row.appendChild(right);
 
-  row.addEventListener("click", () => {
+  let completionAckStarted = false;
+  function acknowledgeCompletion() {
     unreadSessions.delete(session.id);
-    if (canFocus) {
-      render();
-      window.sessionHudAPI.focusSession(session.id);
-    } else {
-      showSessionFeedback(session.id, focusUnavailableTooltip(session));
-    }
-    // Fire-and-forget: the row click's primary intent is focus / unread
-    // dismissal. ack failure shouldn't block the UI — the next snapshot
-    // will reconcile the lifecycle flag.
+    if (completionBell) completionBell.hidden = true;
+    if (completionAckStarted) return;
+    completionAckStarted = true;
+    // Fire-and-forget: acknowledging a completion should not block the row's
+    // navigation gesture. The next snapshot reconciles lifecycle state.
     if (window.sessionHudAPI && typeof window.sessionHudAPI.ackCompletion === "function") {
       Promise.resolve(window.sessionHudAPI.ackCompletion(session.id)).catch((err) => {
         console.warn("ack completion threw:", err);
       });
+    }
+  }
+
+  row.addEventListener("click", () => {
+    acknowledgeCompletion();
+    if (!canFocus) {
+      showSessionFeedback(session.id, focusUnavailableTooltip(session));
+    }
+  });
+
+  row.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    acknowledgeCompletion();
+    if (canFocus) {
+      window.sessionHudAPI.focusSession(session.id);
+    } else {
+      showSessionFeedback(session.id, focusUnavailableTooltip(session));
     }
   });
 

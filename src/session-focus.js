@@ -1,6 +1,7 @@
 "use strict";
 
 const { isCodexDesktopOriginator } = require("../hooks/codex-originator");
+const { parseSessionKey } = require("./session-key");
 
 const CODEX_THREAD_SESSION_ID_RE = /^codex:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
@@ -16,8 +17,15 @@ function normalizeOsPlatform(options) {
 function getCodexThreadId(entry) {
   if (!entry || entry.agentId !== "codex") return null;
   if (!isCodexDesktopOriginator(entry.codexOriginator || entry.originator)) return null;
-  const match = normalizeString(entry.id).match(CODEX_THREAD_SESSION_ID_RE);
-  return match ? match[1] : null;
+  for (const value of [entry.rawSessionId, entry.id]) {
+    const sessionId = normalizeString(value);
+    if (!sessionId) continue;
+    const identity = parseSessionKey(sessionId);
+    const rawSessionId = identity ? identity.rawSessionId : sessionId;
+    const match = rawSessionId.match(CODEX_THREAD_SESSION_ID_RE);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 function getCodexThreadUrl(entry) {

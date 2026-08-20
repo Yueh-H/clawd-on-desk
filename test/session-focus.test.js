@@ -2,6 +2,7 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
+const { makeSessionKey } = require("../src/session-key");
 
 const {
   getCodexThreadId,
@@ -58,6 +59,9 @@ describe("session focus helpers", () => {
       originator: "Codex Desktop",
     }), "019e115a-4df2-7ed0-b90e-8e6345aca777");
     assert.strictEqual(getCodexThreadUrl(entry), "codex://threads/019e115a-4df2-7ed0-b90e-8e6345aca777");
+    const canonicalId = makeSessionKey({ profileId: "local", rawSessionId: entry.id });
+    assert.strictEqual(getCodexThreadId({ ...entry, id: canonicalId }), "019e115a-4df2-7ed0-b90e-8e6345aca777");
+    assert.strictEqual(getCodexThreadUrl({ ...entry, id: canonicalId }), "codex://threads/019e115a-4df2-7ed0-b90e-8e6345aca777");
     assert.deepStrictEqual(getSessionFocusTarget(entry), {
       canFocus: true,
       type: "codex-thread",

@@ -90,6 +90,7 @@ function translations() {
     dashboardCount: "{n} active",
     dashboardJumpTerminal: "Jump",
     dashboardOpenFolder: "Open Folder",
+    dashboardUnknownAgent: "Unknown",
     sessionFocusUnavailableRemote: "Remote sessions cannot focus a terminal on this computer.",
     sessionFocusUnavailableWebui: "WebUI sessions do not have a local terminal window.",
     sessionFocusUnavailableMissingTerminalInfo: "This session did not provide terminal window information.",
@@ -97,6 +98,7 @@ function translations() {
     sessionOpenFolderUnavailable: "This folder is no longer available.",
     sessionJustNow: "now",
     sessionHudElapsedSec: "{n}s",
+    sessionHudDoubleClickToFocus: "Double-click to open this session",
     sessionMinAgo: "{n}m",
     sessionHrAgo: "{n}h",
     sessionBadgeIdle: "Idle",
@@ -213,6 +215,8 @@ async function loadDashboard(
 async function loadHud(sessions, openResult = { status: "ok" }) {
   const document = createDocument(["hud"]);
   const openCalls = [];
+  const focusCalls = [];
+  const ackCalls = [];
   let snapshotListener = null;
   let feedbackTimeout = null;
   const api = {
@@ -223,8 +227,11 @@ async function loadHud(sessions, openResult = { status: "ok" }) {
       openCalls.push(args);
       return typeof openResult === "function" ? openResult(...args) : openResult;
     },
-    focusSession: () => {},
-    ackCompletion: async () => ({ status: "noop" }),
+    focusSession: (...args) => { focusCalls.push(args); },
+    ackCompletion: async (...args) => {
+      ackCalls.push(args);
+      return { status: "noop" };
+    },
     openDashboard: () => {},
     setPinned: () => {},
   };
@@ -241,6 +248,8 @@ async function loadHud(sessions, openResult = { status: "ok" }) {
   return {
     root: document.elements.get("hud"),
     openCalls,
+    focusCalls,
+    ackCalls,
     pushSnapshot: (nextSessions = sessions) => snapshotListener({
       sessions: nextSessions,
       orderedIds: nextSessions.map((entry) => entry.id),
@@ -456,6 +465,29 @@ test("HUD unfocusable click explains why and offers folder only for local non-we
   assert.strictEqual(byClass(root, "open-folder-button").length, 1);
 });
 
+test("HUD shows the agent name and focuses only after a row double-click", async () => {
+  const harness = await loadHud([
+    session("focusable", {
+      agentId: "codex",
+      agentName: "Codex",
+      canFocus: true,
+    }),
+  ]);
+  const row = byClass(harness.root, "row-focusable")[0];
+
+  assert.ok(row);
+  assert.strictEqual(byClass(harness.root, "agent-name")[0].textContent, "Codex");
+  assert.strictEqual(row.title, "Double-click to open this session");
+
+  await row.dispatch("click");
+  assert.deepStrictEqual(harness.focusCalls, []);
+  assert.deepStrictEqual(harness.ackCalls, [["focusable"]]);
+
+  await row.dispatch("dblclick");
+  assert.deepStrictEqual(harness.focusCalls, [["focusable"]]);
+  assert.deepStrictEqual(harness.ackCalls, [["focusable"]]);
+});
+
 test("HUD folder click sends only id and exposes open failure", async () => {
   const { root, openCalls } = await loadHud([session("local")], { status: "not-available" });
   await byClass(root, "open-folder-button")[0].dispatch("click");
@@ -496,9 +528,10 @@ test("HUD feedback survives snapshot renders and clears on its timeout", async (
   assert.strictEqual(byClass(harness.root, "title")[0].textContent, "local");
 });
 
-test("unfocusable and folder feedback copy exists in all supported languages", () => {
+test("HUD interaction and folder feedback copy exists in all supported languages", () => {
   const keys = [
     "dashboardOpenFolder",
+    "sessionHudDoubleClickToFocus",
     "sessionOpenFolderFailed",
     "sessionOpenFolderUnavailable",
     "sessionFocusUnavailableRemote",
