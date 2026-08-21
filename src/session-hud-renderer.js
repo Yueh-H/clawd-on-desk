@@ -2,13 +2,15 @@
 
 const { canOfferLocalFolder, focusUnavailableReasonKey } = globalThis.ClawdSessionFocusUnavailable;
 
-const HUD_MAX_EXPANDED_ROWS = 6;
-const HUD_MAX_EXPANDED_ROWS_LABELS = 8;
+const HUD_MIN_ROWS = 1;
+const HUD_MAX_ROWS = 24;
+const HUD_DEFAULT_MAX_ROWS = 24;
 const HUD_TITLE_MAX_UNITS = 32;
 const RECENT_DONE_UNREAD_MS = 60 * 1000;
 const SESSION_ACTION_FEEDBACK_MS = 4000;
+const ACTIONABLE_IDLE_EVENTS = new Set(["PermissionRequest", "Elicitation", "Notification"]);
 
-let snapshot = { sessions: [], orderedIds: [], hudTotalNonIdle: 0, hudLastTitle: null, hudShowStateLabels: true, hudShowElapsed: true, hudShowContextUsage: true, hudShowQuota: true, hudPinned: false, accountQuota: [] };
+let snapshot = { sessions: [], orderedIds: [], hudTotalNonIdle: 0, hudLastTitle: null, hudMaxRows: HUD_DEFAULT_MAX_ROWS, hudShowIdle: false, hudShowStateLabels: true, hudShowElapsed: true, hudShowContextUsage: true, hudShowQuota: true, hudPinned: false, accountQuota: [] };
 let i18nPayload = { lang: "en", translations: {} };
 
 const unreadSessions = new Set();
@@ -19,8 +21,17 @@ let sessionActionFeedbackTimer = null;
 
 const hudEl = document.getElementById("hud");
 
-function isHudSession(session) {
-  return !!session && !session.headless && session.state !== "sleeping" && !session.hiddenFromHud;
+function isActionableIdleSession(session) {
+  const rawEvent = session && session.lastEvent && session.lastEvent.rawEvent;
+  return ACTIONABLE_IDLE_EVENTS.has(rawEvent);
+}
+
+function isHudSession(session, showIdle = true) {
+  if (!session || session.headless || session.state === "sleeping" || session.hiddenFromHud) return false;
+  const includeIdle = typeof showIdle === "boolean" ? showIdle : true;
+  if (includeIdle) return true;
+  const badge = session.badge || (session.state === "idle" ? "idle" : "running");
+  return badge !== "idle" || isActionableIdleSession(session);
 }
 
 function t(key) {
@@ -109,7 +120,8 @@ function orderedHudSessions(currentSnapshot) {
   const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
   const orderedIds = new Set(ordered.map((session) => session.id));
   const missing = sessions.filter((session) => !orderedIds.has(session.id));
-  return ordered.concat(missing).filter(isHudSession);
+  const showIdle = currentSnapshot.hudShowIdle !== false;
+  return ordered.concat(missing).filter((session) => isHudSession(session, showIdle));
 }
 
 const STATE_CHIP_MAP = {
@@ -217,9 +229,10 @@ function updateUnread(sessions) {
 }
 
 function splitHudLayout(sessions) {
-  const maxRows = snapshot.hudShowStateLabels === false
-    ? HUD_MAX_EXPANDED_ROWS
-    : HUD_MAX_EXPANDED_ROWS_LABELS;
+  const configuredRows = Number.isInteger(snapshot.hudMaxRows)
+    ? snapshot.hudMaxRows
+    : HUD_DEFAULT_MAX_ROWS;
+  const maxRows = Math.max(HUD_MIN_ROWS, Math.min(HUD_MAX_ROWS, configuredRows));
   const expanded = sessions.slice(0, maxRows);
   const folded = sessions.slice(maxRows);
   return { expanded, folded };
@@ -432,6 +445,19 @@ function createRowForSession(session, now) {
     if (!canFocus) {
       showSessionFeedback(session.id, focusUnavailableTooltip(session));
     }
+  });
+
+  row.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!window.sessionHudAPI || typeof window.sessionHudAPI.showSessionMenu !== "function") return;
+    Promise.resolve(window.sessionHudAPI.showSessionMenu(session.id)).then((result) => {
+      if (result && result.status === "error") {
+        console.warn("session HUD context menu failed:", result.message || result.reason);
+      }
+    }).catch((err) => {
+      console.warn("session HUD context menu threw:", err);
+    });
   });
 
   row.addEventListener("dblclick", (event) => {

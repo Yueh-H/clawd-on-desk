@@ -381,6 +381,8 @@ const updateRegistry = {
   },
   bubbleFollowPet: requireBoolean("bubbleFollowPet"),
   sessionHudEnabled: requireBoolean("sessionHudEnabled"),
+  sessionHudMaxRows: requireIntegerInRange("sessionHudMaxRows", 1, 24),
+  sessionHudShowIdle: requireBoolean("sessionHudShowIdle"),
   sessionHudShowStateLabels: requireBoolean("sessionHudShowStateLabels"),
   sessionHudShowElapsed: requireBoolean("sessionHudShowElapsed"),
   sessionHudShowContextUsage: requireBoolean("sessionHudShowContextUsage"),

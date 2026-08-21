@@ -72,6 +72,10 @@ function createHarness(overrides = {}) {
       calls.push(["hideSession", sessionId]);
       return { status: "ok", hidden: sessionId };
     }),
+    showSessionHudMenu: overrides.showSessionHudMenu || ((event, sessionId) => {
+      calls.push(["showSessionHudMenu", sessionId, event.sender]);
+      return { status: "ok" };
+    }),
     setSessionAlias: overrides.setSessionAlias || (async (payload) => {
       calls.push(["setSessionAlias", payload]);
       return { status: "ok", alias: payload.alias };
@@ -137,6 +141,7 @@ test("session IPC registers owned channels and disposes them", () => {
     "dashboard:set-session-automation",
     "session-hud:get-i18n",
     "session-hud:open-session-folder",
+    "session-hud:show-session-menu",
     "session:ack-completion",
   ]);
   assert.deepStrictEqual([...ipcMain.listeners.keys()].sort(), [
@@ -177,6 +182,10 @@ test("session IPC delegates dashboard and HUD behavior", async () => {
     hidden: "hidden-session",
   });
   assert.deepStrictEqual(
+    await ipcMain.invoke("session-hud:show-session-menu", "hud-menu-session"),
+    { status: "ok" }
+  );
+  assert.deepStrictEqual(
     await ipcMain.invoke("dashboard:set-session-alias", { sessionId: "s1", alias: "Frontend" }),
     { status: "ok", alias: "Frontend" }
   );
@@ -195,6 +204,7 @@ test("session IPC delegates dashboard and HUD behavior", async () => {
     ["setSessionHudPinned", true],
     ["setSessionHudPinned", false],
     ["hideSession", "hidden-session"],
+    ["showSessionHudMenu", "hud-menu-session", "sender-web-contents"],
     ["setSessionAlias", { sessionId: "s1", alias: "Frontend" }],
     ["openSessionFolder", "folder-session"],
     ["openSessionFolder", "hud-folder-session"],
@@ -208,6 +218,15 @@ test("dashboard and HUD open-folder IPC accept only a sessionId string", async (
       const result = await ipcMain.invoke(channel, bad);
       assert.strictEqual(result.status, "error");
     }
+  }
+  assert.deepStrictEqual(calls, []);
+});
+
+test("HUD context-menu IPC accepts only a sessionId string", async () => {
+  const { ipcMain, calls } = createHarness();
+  for (const bad of [null, undefined, "", 42, { sessionId: "s1" }]) {
+    const result = await ipcMain.invoke("session-hud:show-session-menu", bad);
+    assert.strictEqual(result.status, "error");
   }
   assert.deepStrictEqual(calls, []);
 });
@@ -343,6 +362,7 @@ test("registerSessionIpc requires ackSessionCompletion dep", () => {
       getI18n: () => ({}),
       focusSession: () => {},
       hideSession: () => {},
+      showSessionHudMenu: () => {},
       setSessionAlias: () => {},
       showDashboard: () => {},
       setSessionHudPinned: () => {},

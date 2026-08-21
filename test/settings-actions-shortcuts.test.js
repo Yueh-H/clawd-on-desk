@@ -31,6 +31,13 @@ function makeDeps(overrides = {}) {
       globalShortcut,
       shortcutHandlers: {
         togglePet: () => {},
+        openDashboard: () => {},
+        focusSession1: () => {},
+        focusSession2: () => {},
+        focusSession3: () => {},
+        focusSession4: () => {},
+        focusSession5: () => {},
+        focusSession6: () => {},
       },
     },
     calls,

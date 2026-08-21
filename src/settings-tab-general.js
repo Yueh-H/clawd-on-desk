@@ -16,6 +16,8 @@
     "showTray",
     "showDock",
     "sessionHudEnabled",
+    "sessionHudMaxRows",
+    "sessionHudShowIdle",
     "sessionHudShowStateLabels",
     "sessionHudShowElapsed",
     "sessionHudShowContextUsage",
@@ -59,12 +61,14 @@
     "flashIntervalMs",
     "flashDurationMs",
   ]);
+  const SESSION_HUD_NUMBER_KEYS = new Set(["sessionHudMaxRows"]);
   const SESSION_CLEANUP_DEFAULTS = {
     sessionStaleMs: 600_000,
     workingStaleMs: 300_000,
     detachedIdleStaleMs: 30_000,
   };
   const SESSION_HUD_CHILD_SWITCH_KEYS = [
+    "sessionHudShowIdle",
     "sessionHudShowStateLabels",
     "sessionHudShowElapsed",
     "sessionHudShowContextUsage",
@@ -72,6 +76,8 @@
   ];
   const SESSION_HUD_SUMMARY_KEYS = new Set([
     "sessionHudEnabled",
+    "sessionHudMaxRows",
+    "sessionHudShowIdle",
     "sessionHudShowStateLabels",
     "sessionHudShowElapsed",
     "sessionHudShowContextUsage",
@@ -922,10 +928,27 @@
   }
 
   function buildSessionHudOptionsList(sessionHudControlsEnabled) {
+    const maxRowsControl = helpers.buildNumberInputRow({
+      key: "sessionHudMaxRows",
+      labelKey: "rowSessionHudMaxRows",
+      descKey: "rowSessionHudMaxRowsDesc",
+      toDisplay: (value) => value,
+      fromDisplay: (value) => Math.max(1, Math.min(24, Math.round(value))),
+      min: 1,
+      max: 24,
+    });
+    maxRowsControl.input.disabled = !sessionHudControlsEnabled;
     return buildOptionList("session-hud-option-list", [
       helpers.buildSwitchRow({
         key: "sessionHudEnabled",
         labelKey: "rowSessionHudMaster",
+      }),
+      maxRowsControl.row,
+      helpers.buildSwitchRow({
+        key: "sessionHudShowIdle",
+        labelKey: "rowSessionHudShowIdle",
+        descKey: "rowSessionHudShowIdleDesc",
+        disabled: !sessionHudControlsEnabled,
       }),
       helpers.buildSwitchRow({
         key: "sessionHudShowStateLabels",
@@ -973,6 +996,20 @@
         });
       }
       if (enabled) {
+        const maxRows = Number.isInteger(snapshot.sessionHudMaxRows)
+          ? snapshot.sessionHudMaxRows
+          : 24;
+        items.push({
+          text: t("sessionHudSummaryMaxRows").replace("{n}", String(maxRows)),
+          accent: true,
+        });
+        items.push({
+          text: t("sessionHudSummaryIdle").replace(
+            "{state}",
+            snapshot.sessionHudShowIdle === true ? onLabel : offLabel
+          ),
+          accent: snapshot.sessionHudShowIdle === true,
+        });
         items.push({
           text: t("sessionHudSummaryLabels").replace(
             "{state}",
@@ -2130,6 +2167,9 @@
     for (const key of SESSION_HUD_CHILD_SWITCH_KEYS) {
       if (!setGeneralSwitchDisabled(key, disabled)) return false;
     }
+    const maxRows = state.mountedControls.sessionCleanupControls.get("sessionHudMaxRows");
+    if (!maxRows || !document.body.contains(maxRows.row)) return false;
+    maxRows.input.disabled = disabled;
     return true;
   }
 
@@ -2196,6 +2236,13 @@
       && !SESSION_HUD_CHILD_SWITCH_KEYS.every((key) => getMountedGeneralSwitch(key))) {
       return false;
     }
+    if (keys.some((key) => SESSION_HUD_NUMBER_KEYS.has(key))) {
+      for (const key of keys) {
+        if (!SESSION_HUD_NUMBER_KEYS.has(key)) continue;
+        const meta = state.mountedControls.sessionCleanupControls.get(key);
+        if (!meta || !document.body.contains(meta.row)) return false;
+      }
+    }
     if (keys.some((key) => key === "showTray" || key === "showDock")
       && (!i18n || !i18n.IS_MAC
         || !getMountedGeneralSwitch("showTray")
@@ -2245,6 +2292,7 @@
       }
       if (SESSION_CLEANUP_NUMBER_KEYS.has(key)) continue;
       if (FLASH_NUMBER_KEYS.has(key)) continue;
+      if (SESSION_HUD_NUMBER_KEYS.has(key)) continue;
       if (key === "roamConstrainAxis") continue;
       const meta = state.mountedControls.generalSwitches.get(key);
       if (!meta || !document.body.contains(meta.element)) return false;
@@ -2280,6 +2328,10 @@
         continue;
       }
       if (FLASH_NUMBER_KEYS.has(key)) {
+        state.mountedControls.sessionCleanupControls.get(key).syncFromSnapshot();
+        continue;
+      }
+      if (SESSION_HUD_NUMBER_KEYS.has(key)) {
         state.mountedControls.sessionCleanupControls.get(key).syncFromSnapshot();
         continue;
       }

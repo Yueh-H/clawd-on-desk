@@ -7,6 +7,7 @@ const sessionHud = require("../src/session-hud");
 const {
   computeSessionHudBounds,
   computeHudLayout,
+  getHudMaxExpandedRows,
   computeHudHeight,
   getHudWidth,
   getHudWidthScale,
@@ -24,6 +25,7 @@ function mkSession(id, overrides = {}) {
   return {
     id,
     state: "working",
+    badge: "running",
     headless: false,
     updatedAt: Date.now(),
     ...overrides,
@@ -243,12 +245,22 @@ describe("session HUD geometry", () => {
 });
 
 describe("session HUD layout", () => {
+  it("defaults to 24 visible sessions and clamps custom limits", () => {
+    assert.strictEqual(constants.HUD_MIN_ROWS, 1);
+    assert.strictEqual(constants.HUD_MAX_ROWS, 24);
+    assert.strictEqual(constants.HUD_DEFAULT_MAX_ROWS, 24);
+    assert.strictEqual(getHudMaxExpandedRows(), 24);
+    assert.strictEqual(getHudMaxExpandedRows(8), 8);
+    assert.strictEqual(getHudMaxExpandedRows(0), 1);
+    assert.strictEqual(getHudMaxExpandedRows(25), 24);
+  });
+
   it("keeps renderer row caps aligned with main-process window geometry", () => {
     const rendererSource = fs.readFileSync(
       path.join(__dirname, "..", "src", "session-hud-renderer.js"),
       "utf8"
     );
-    for (const key of ["HUD_MAX_EXPANDED_ROWS", "HUD_MAX_EXPANDED_ROWS_LABELS"]) {
+    for (const key of ["HUD_MIN_ROWS", "HUD_MAX_ROWS", "HUD_DEFAULT_MAX_ROWS"]) {
       const match = rendererSource.match(new RegExp(`const ${key} = (\\d+);`));
       assert.ok(match, `${key} should be declared in the HUD renderer`);
       assert.strictEqual(Number(match[1]), constants[key], `${key} must match the main process`);
@@ -268,42 +280,44 @@ describe("session HUD layout", () => {
     assert.strictEqual(rowCount, 3);
   });
 
-  it("folds sessions beyond the state-label row cap", () => {
+  it("folds sessions beyond the default 24-row cap", () => {
     const sessions = [];
     const orderedIds = [];
-    const total = constants.HUD_MAX_EXPANDED_ROWS_LABELS + 2;
+    const total = constants.HUD_DEFAULT_MAX_ROWS + 2;
     for (let i = 0; i < total; i++) {
       sessions.push(mkSession(`s${i}`));
       orderedIds.push(`s${i}`);
     }
     const { expanded, folded, rowCount } = computeHudLayout({ sessions, orderedIds });
-    assert.strictEqual(expanded.length, constants.HUD_MAX_EXPANDED_ROWS_LABELS);
+    assert.strictEqual(expanded.length, constants.HUD_DEFAULT_MAX_ROWS);
     assert.strictEqual(folded.length, 2);
-    assert.strictEqual(rowCount, constants.HUD_MAX_EXPANDED_ROWS_LABELS + 1);
+    assert.strictEqual(rowCount, constants.HUD_DEFAULT_MAX_ROWS + 1);
   });
 
-  it("folds sessions beyond the compact row cap when state labels are hidden", () => {
+  it("folds sessions beyond a configured row cap", () => {
     const sessions = [];
     const orderedIds = [];
-    const total = constants.HUD_MAX_EXPANDED_ROWS + 2;
+    const maxRows = 7;
+    const total = maxRows + 2;
     for (let i = 0; i < total; i++) {
       sessions.push(mkSession(`s${i}`));
       orderedIds.push(`s${i}`);
     }
     const { expanded, folded, rowCount } = computeHudLayout(
       { sessions, orderedIds },
-      { showStateLabels: false }
+      { maxRows }
     );
-    assert.strictEqual(expanded.length, constants.HUD_MAX_EXPANDED_ROWS);
+    assert.strictEqual(expanded.length, maxRows);
     assert.strictEqual(folded.length, 2);
-    assert.strictEqual(rowCount, constants.HUD_MAX_EXPANDED_ROWS + 1);
+    assert.strictEqual(rowCount, maxRows + 1);
   });
 
   it("respects orderedIds for picking the expanded set (most recent first)", () => {
-    const total = constants.HUD_MAX_EXPANDED_ROWS + 1;
+    const maxRows = 5;
+    const total = maxRows + 1;
     const orderedIds = Array.from({ length: total }, (_value, index) => `s${index}`);
     const sessions = orderedIds.slice().reverse().map((id) => mkSession(id));
-    const { expanded, folded } = computeHudLayout({ sessions, orderedIds }, { showStateLabels: false });
+    const { expanded, folded } = computeHudLayout({ sessions, orderedIds }, { maxRows });
     assert.deepStrictEqual(expanded.map((s) => s.id), orderedIds.slice(0, -1));
     assert.deepStrictEqual(folded.map((s) => s.id), orderedIds.slice(-1));
   });
@@ -349,6 +363,26 @@ describe("session HUD layout", () => {
     assert.deepStrictEqual(expanded.map((s) => s.id), ["done", "working"]);
     assert.strictEqual(folded.length, 0);
     assert.strictEqual(rowCount, 2);
+  });
+
+  it("hides ordinary idle sessions while preserving actionable waiting rows", () => {
+    const sessions = [
+      mkSession("running"),
+      mkSession("idle", { state: "idle", badge: "idle" }),
+      mkSession("waiting", {
+        state: "idle",
+        badge: "idle",
+        lastEvent: { rawEvent: "PermissionRequest" },
+      }),
+      mkSession("done", { state: "idle", badge: "done" }),
+    ];
+    const { expanded, folded, rowCount } = computeHudLayout(
+      { sessions, orderedIds: ["idle", "waiting", "running", "done"] },
+      { showIdle: false }
+    );
+    assert.deepStrictEqual(expanded.map((session) => session.id), ["waiting", "running", "done"]);
+    assert.strictEqual(folded.length, 0);
+    assert.strictEqual(rowCount, 3);
   });
 
   it("returns 0 rows for empty snapshot", () => {

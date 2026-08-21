@@ -313,7 +313,9 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
   const hiddenFromHud = shouldAutoClearDetachedSession(session, badge, options)
     || isSupersededLocalCodexProcessSession(id, session, options.latestLocalCodexProcessIds);
   const startupRecovered = !!(session && session.startupRecovered === true);
-  const focusTarget = session && !session.headless && !startupRecovered && state !== "sleeping" && !hiddenFromHud
+  // Recovery leases are admitted only after their process identity is verified,
+  // so their preserved sourcePid remains a valid focus fallback after restart.
+  const focusTarget = session && !session.headless && state !== "sleeping" && !hiddenFromHud
     ? getSessionFocusTarget({ ...(session || {}), id }, {
       osPlatform: options.focusHostPlatform || options.osPlatform,
     })

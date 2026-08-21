@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Notification, screen, ipcMain, globalShortcut, nativeTheme, dialog, shell, nativeImage, powerSaveBlocker, powerMonitor, clipboard, safeStorage } = require("electron");
+const { app, BrowserWindow, Menu, Notification, screen, ipcMain, globalShortcut, nativeTheme, dialog, shell, nativeImage, powerSaveBlocker, powerMonitor, clipboard, safeStorage } = require("electron");
 const { maybeRunPackageKoffiSmoke } = require("./package-koffi-smoke");
 if (maybeRunPackageKoffiSmoke({ app, BrowserWindow })) {
   return;
@@ -73,6 +73,7 @@ if (_xwaylandRelaunch) {
 const { clampTextScale, scaleWidth, scaleHeight, resolveTextScaleForKey } = require("./text-scale");
 const path = require("path");
 const fs = require("fs");
+const { execFile } = require("child_process");
 const crypto = require("crypto");
 const { pathToFileURL } = require("url");
 const { EventEmitter } = require("events");
@@ -170,6 +171,10 @@ const {
   getSessionFocusTarget,
 } = require("./session-focus");
 const { focusCodexThreadTarget } = require("./session-focus-handoff");
+const {
+  createClaudeDesktopSessionResolver,
+  focusClaudeDesktopSessionTarget,
+} = require("./claude-desktop-session-focus");
 const { isSessionInProgress } = require("./state-session-snapshot");
 const { restoreSessionsFromRecoveryLeases } = require("./session-recovery-loader");
 const { getAllAgents, getAgent } = require("../agents/registry");
@@ -427,6 +432,13 @@ let feishuSessionAutomationRouteSignature = "";
 let feishuApprovalSecretsRevision = 0;
 const shortcutHandlers = {
   togglePet: () => togglePetVisibility(),
+  openDashboard: () => showDashboard(),
+  focusSession1: () => focusSessionByIndex(0),
+  focusSession2: () => focusSessionByIndex(1),
+  focusSession3: () => focusSessionByIndex(2),
+  focusSession4: () => focusSessionByIndex(3),
+  focusSession5: () => focusSessionByIndex(4),
+  focusSession6: () => focusSessionByIndex(5),
 };
 const _settingsController = createSettingsController({
   prefsPath: PREFS_PATH,
@@ -1105,6 +1117,8 @@ let autoStartWithClaude = _settingsController.get("autoStartWithClaude");
 let openAtLogin = _settingsController.get("openAtLogin");
 let bubbleFollowPet = _settingsController.get("bubbleFollowPet");
 let sessionHudEnabled = _settingsController.get("sessionHudEnabled");
+let sessionHudMaxRows = _settingsController.get("sessionHudMaxRows");
+let sessionHudShowIdle = _settingsController.get("sessionHudShowIdle");
 let sessionHudShowStateLabels = _settingsController.get("sessionHudShowStateLabels");
 let sessionHudShowElapsed = _settingsController.get("sessionHudShowElapsed");
 let sessionHudShowContextUsage = _settingsController.get("sessionHudShowContextUsage");
@@ -2108,6 +2122,9 @@ const {
   captureGhosttyTerminalId,
   clearMacFocusCooldownTimer,
 } = _focus;
+const resolveClaudeDesktopSession = createClaudeDesktopSessionResolver({
+  platform: process.platform,
+});
 
 function getFocusableLocalHudSessionIds() {
   if (!_state || typeof _state.buildSessionSnapshot !== "function") return [];
@@ -2147,6 +2164,18 @@ function focusDashboardSession(sessionId, options = {}) {
 
   const focusEntry = { ...(session || {}), ...(fallbackEntry || {}), id };
   const focusTarget = getSessionFocusTarget(focusEntry, { osPlatform: process.platform });
+  if (focusTarget.canFocus && focusTarget.type === "terminal") {
+    const claudeDesktopHandoff = focusClaudeDesktopSessionTarget({
+      shell,
+      focusEntry,
+      sessionId: id,
+      requestSource,
+      resolveClaudeDesktopSession,
+      focusLog,
+      focusTerminalSession,
+    });
+    if (claudeDesktopHandoff) return true;
+  }
   if (focusTarget.type === "codex-thread" && focusTarget.url) {
     focusCodexThreadTarget({
       shell,
@@ -2172,6 +2201,26 @@ function focusDashboardSession(sessionId, options = {}) {
   return false;
 }
 
+function focusSessionByIndex(index) {
+  if (!_state || typeof _state.buildSessionSnapshot !== "function") return false;
+  const snapshot = _state.buildSessionSnapshot();
+  const sessionsList = Array.isArray(snapshot.sessions) ? snapshot.sessions : [];
+  if (sessionsList.length === 0) return false;
+  const byId = new Map(sessionsList.map((s) => [s.id, s]));
+  const orderedIds = Array.isArray(snapshot.orderedIds)
+    ? snapshot.orderedIds
+    : sessionsList.map((s) => s.id);
+  const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+  const orderedSet = new Set(ordered.map((s) => s.id));
+  const missing = sessionsList.filter((s) => !orderedSet.has(s.id));
+  const visible = ordered.concat(missing).filter(
+    (s) => s && !s.headless && s.state !== "sleeping" && !s.hiddenFromHud
+  );
+  const target = visible[index];
+  if (!target || !target.id) return false;
+  return focusDashboardSession(target.id, { requestSource: "shortcut" });
+}
+
 function hideDashboardSession(sessionId) {
   if (!_state || typeof _state.dismissSession !== "function") {
     return { status: "error", message: "session state is not ready" };
@@ -2180,6 +2229,34 @@ function hideDashboardSession(sessionId) {
   return removed
     ? { status: "ok" }
     : { status: "not-found" };
+}
+
+function showSessionHudContextMenu(event, sessionId) {
+  const id = typeof sessionId === "string" ? sessionId : "";
+  if (!id) return { status: "error", message: "session id is required" };
+
+  const hudWindow = getSessionHudWindow();
+  const contents = hudWindow && !hudWindow.isDestroyed() ? hudWindow.webContents : null;
+  const frame = event && event.senderFrame;
+  if (
+    !contents
+    || !event
+    || event.sender !== contents
+    || !frame
+    || frame !== contents.mainFrame
+  ) {
+    return { status: "error", reason: "untrusted-session-hud-sender" };
+  }
+
+  try {
+    Menu.buildFromTemplate([{
+      label: translate("sessionHudDeleteSession"),
+      click: () => hideDashboardSession(id),
+    }]).popup({ window: hudWindow });
+    return { status: "ok" };
+  } catch (err) {
+    return { status: "error", message: err && err.message };
+  }
 }
 
 const openDashboardSessionFolder = createSessionFolderOpener({
@@ -2327,6 +2404,8 @@ const _sessionHud = require("./session-hud")({
   get win() { return win; },
   get petHidden() { return petWindowRuntime.isPetHidden(); },
   get sessionHudEnabled() { return sessionHudEnabled; },
+  get sessionHudMaxRows() { return sessionHudMaxRows; },
+  get sessionHudShowIdle() { return sessionHudShowIdle; },
   get sessionHudShowStateLabels() { return sessionHudShowStateLabels; },
   get sessionHudShowElapsed() { return sessionHudShowElapsed; },
   get sessionHudShowContextUsage() { return sessionHudShowContextUsage; },
@@ -2437,6 +2516,8 @@ const _serverCtx = {
   replyOpencodeFamilyPermission,
   syncPermissionShortcuts,
   permLog,
+  focusSessionByIndex: (index) => focusSessionByIndex(index),
+  showDashboard: () => showDashboard(),
 };
 const _server = require("./server")(_serverCtx);
 const { startHttpServer, getHookServerPort } = _server;
@@ -3780,6 +3861,8 @@ const SETTINGS_MIRROR_SETTERS = {
   showDock: (v) => { showDock = v; if (macHideController) macHideController.noteManualChange(); }, manageClaudeHooksAutomatically: (v) => { manageClaudeHooksAutomatically = v; },
   autoStartWithClaude: (v) => { autoStartWithClaude = v; }, openAtLogin: (v) => { openAtLogin = v; },
   bubbleFollowPet: (v) => { bubbleFollowPet = v; }, sessionHudEnabled: (v) => { sessionHudEnabled = v; },
+  sessionHudMaxRows: (v) => { sessionHudMaxRows = v; },
+  sessionHudShowIdle: (v) => { sessionHudShowIdle = v; },
   sessionHudShowStateLabels: (v) => { sessionHudShowStateLabels = v; },
   sessionHudShowElapsed: (v) => { sessionHudShowElapsed = v; },
   sessionHudShowContextUsage: (v) => { sessionHudShowContextUsage = v; },
@@ -4162,6 +4245,7 @@ registerSessionIpc({
   refreshKimiQuota: () => _kimiQuotaRuntime.refresh(),
   focusSession: (sessionId, options) => focusDashboardSession(sessionId, options),
   hideSession: (sessionId) => hideDashboardSession(sessionId),
+  showSessionHudMenu: (event, sessionId) => showSessionHudContextMenu(event, sessionId),
   openSessionFolder: (sessionId) => openDashboardSessionFolder(sessionId),
   ackSessionCompletion: (sessionId) => _state.ackSessionCompletion(sessionId),
   setSessionAlias: (payload) => _settingsController.applyCommand("setSessionAlias", payload),

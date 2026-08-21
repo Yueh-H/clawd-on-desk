@@ -17,10 +17,38 @@ const {
   validateShortcutMapShape,
 } = require("../src/shortcut-actions");
 
+const EXPECTED_ACTION_IDS = [
+  "togglePet",
+  "openDashboard",
+  "focusSession1",
+  "focusSession2",
+  "focusSession3",
+  "focusSession4",
+  "focusSession5",
+  "focusSession6",
+  "permissionAllow",
+  "permissionDeny",
+];
+
+const EXPECTED_DEFAULTS = {
+  togglePet: "CommandOrControl+Shift+Alt+C",
+  openDashboard: "CommandOrControl+Shift+Alt+D",
+  focusSession1: "CommandOrControl+Shift+Alt+1",
+  focusSession2: "CommandOrControl+Shift+Alt+2",
+  focusSession3: "CommandOrControl+Shift+Alt+3",
+  focusSession4: "CommandOrControl+Shift+Alt+4",
+  focusSession5: "CommandOrControl+Shift+Alt+5",
+  focusSession6: "CommandOrControl+Shift+Alt+6",
+  permissionAllow: "CommandOrControl+Shift+Y",
+  permissionDeny: "CommandOrControl+Shift+N",
+};
+
 describe("shortcut-actions metadata", () => {
   it("exposes all known shortcut action ids", () => {
-    assert.deepStrictEqual(SHORTCUT_ACTION_IDS, ["togglePet", "permissionAllow", "permissionDeny"]);
+    assert.deepStrictEqual(SHORTCUT_ACTION_IDS, EXPECTED_ACTION_IDS);
     assert.strictEqual(SHORTCUT_ACTIONS.togglePet.persistent, true);
+    assert.strictEqual(SHORTCUT_ACTIONS.openDashboard.persistent, true);
+    assert.strictEqual(SHORTCUT_ACTIONS.focusSession6.persistent, true);
     assert.strictEqual(SHORTCUT_ACTIONS.permissionAllow.persistent, false);
     assert.strictEqual(SHORTCUT_ACTIONS.permissionDeny.persistent, false);
   });
@@ -29,11 +57,7 @@ describe("shortcut-actions metadata", () => {
     const a = getDefaultShortcuts();
     const b = getDefaultShortcuts();
     assert.notStrictEqual(a, b);
-    assert.deepStrictEqual(a, {
-      togglePet: "CommandOrControl+Shift+Alt+C",
-      permissionAllow: "CommandOrControl+Shift+Y",
-      permissionDeny: "CommandOrControl+Shift+N",
-    });
+    assert.deepStrictEqual(a, EXPECTED_DEFAULTS);
   });
 });
 
@@ -48,6 +72,11 @@ describe("parseAccelerator", () => {
       modifiers: ["CommandOrControl", "Shift", "Alt"],
       key: "C",
       accelerator: "CommandOrControl+Shift+Alt+C",
+    });
+    assert.deepStrictEqual(parseAccelerator("Shift+Control+K"), {
+      modifiers: ["Control", "Shift"],
+      key: "K",
+      accelerator: "Control+Shift+K",
     });
   });
 
@@ -77,6 +106,7 @@ describe("dangerous accelerator blacklist", () => {
   it("flags reserved global shortcuts", () => {
     assert.ok(DANGEROUS_ACCELERATORS.has("CommandOrControl+C"));
     assert.ok(isDangerousAccelerator("CommandOrControl+S"));
+    assert.ok(isDangerousAccelerator("Control+C"));
     assert.ok(isDangerousAccelerator("Alt+F4"));
     assert.strictEqual(isDangerousAccelerator("CommandOrControl+Shift+Y"), false);
   });
@@ -122,6 +152,15 @@ describe("buildAcceleratorFromEvent", () => {
       { action: "pending", modifiers: ["CommandOrControl", "Shift"] }
     );
     assert.deepStrictEqual(
+      buildAcceleratorFromEvent({
+        key: "Control",
+        code: "ControlLeft",
+        ctrlKey: true,
+        shiftKey: true,
+      }, { isMac: true }),
+      { action: "pending", modifiers: ["Control", "Shift"] }
+    );
+    assert.deepStrictEqual(
       buildAcceleratorFromEvent({ key: "Alt", code: "AltLeft" }),
       { action: "pending", modifiers: [] }
     );
@@ -149,6 +188,10 @@ describe("buildAcceleratorFromEvent", () => {
       formatAcceleratorPartial(["CommandOrControl", "Alt"]),
       "Ctrl+Alt+…"
     );
+    assert.strictEqual(
+      formatAcceleratorPartial(["Control", "Shift"], { isMac: true }),
+      "⌃⇧…"
+    );
   });
 
   it("builds canonical accelerators from keyboard state", () => {
@@ -171,6 +214,24 @@ describe("buildAcceleratorFromEvent", () => {
       }, { isMac: true }),
       { action: "commit", accelerator: "CommandOrControl+Shift+Alt+C" }
     );
+    assert.deepStrictEqual(
+      buildAcceleratorFromEvent({
+        key: "k",
+        code: "KeyK",
+        ctrlKey: true,
+        shiftKey: true,
+      }, { isMac: true }),
+      { action: "commit", accelerator: "Control+Shift+K" }
+    );
+    assert.deepStrictEqual(
+      buildAcceleratorFromEvent({
+        key: "k",
+        code: "KeyK",
+        ctrlKey: true,
+        metaKey: true,
+      }, { isMac: true }),
+      { action: "commit", accelerator: "CommandOrControl+Control+K" }
+    );
   });
 });
 
@@ -180,6 +241,7 @@ describe("formatAcceleratorLabel", () => {
       formatAcceleratorLabel("CommandOrControl+Shift+Alt+C"),
       "Ctrl+Shift+Alt+C"
     );
+    assert.strictEqual(formatAcceleratorLabel("Control+K"), "Ctrl+K");
     assert.strictEqual(formatAcceleratorLabel(null), "— unassigned —");
   });
 
@@ -192,6 +254,10 @@ describe("formatAcceleratorLabel", () => {
       formatAcceleratorLabel("Shift+ArrowUp", { isMac: true }),
       "⇧↑"
     );
+    assert.strictEqual(
+      formatAcceleratorLabel("Control+Shift+K", { isMac: true }),
+      "⌃⇧K"
+    );
   });
 });
 
@@ -200,9 +266,8 @@ describe("normalizeShortcuts", () => {
     assert.deepStrictEqual(
       normalizeShortcuts({ togglePet: "Ctrl+K", bogus: "Ctrl+J" }, getDefaultShortcuts()),
       {
+        ...EXPECTED_DEFAULTS,
         togglePet: "CommandOrControl+K",
-        permissionAllow: "CommandOrControl+Shift+Y",
-        permissionDeny: "CommandOrControl+Shift+N",
       }
     );
   });
@@ -215,6 +280,7 @@ describe("normalizeShortcuts", () => {
         permissionDeny: undefined,
       }, getDefaultShortcuts()),
       {
+        ...EXPECTED_DEFAULTS,
         togglePet: null,
         permissionAllow: null,
         permissionDeny: null,
@@ -241,9 +307,8 @@ describe("normalizeShortcuts", () => {
         permissionDeny: "Ctrl+Shift+Y",
       }, getDefaultShortcuts()),
       {
+        ...EXPECTED_DEFAULTS,
         togglePet: "CommandOrControl+K",
-        permissionAllow: "CommandOrControl+Shift+Y",
-        permissionDeny: "CommandOrControl+Shift+N",
       }
     );
   });

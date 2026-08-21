@@ -265,11 +265,9 @@ function resetAllShortcuts(_payload, deps) {
     }
   }
 
-  // Track successfully applied persistent changes so we can roll back on
-  // mid-loop failure. Today only `togglePet` is persistent so the loop runs
-  // at most once and rollback is a no-op, but this future-proofs the plan
-  // v3 section 4.2 all-or-nothing contract for when additional persistent
-  // actions get added.
+  // Track successfully applied persistent changes so a failure while resetting
+  // the dashboard/session shortcuts rolls the earlier registrations back and
+  // preserves the all-or-nothing contract.
   const appliedChanges = [];
   for (const actionId of SHORTCUT_ACTION_IDS) {
     const meta = SHORTCUT_ACTIONS[actionId];

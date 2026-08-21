@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const sessionHudHtml = fs.readFileSync(path.join(__dirname, "..", "src", "session-hud.html"), "utf8");
 const sessionHudRenderer = fs.readFileSync(path.join(__dirname, "..", "src", "session-hud-renderer.js"), "utf8");
+const sessionHudPreload = fs.readFileSync(path.join(__dirname, "..", "src", "preload-session-hud.js"), "utf8");
 const quotaRingHtml = fs.readFileSync(path.join(__dirname, "..", "src", "quota-ring.html"), "utf8");
 const quotaRingRenderer = fs.readFileSync(path.join(__dirname, "..", "src", "quota-ring-renderer.js"), "utf8");
 
@@ -187,6 +188,12 @@ describe("session HUD visual shell", () => {
     assert.match(sessionHudRenderer, /row\.classList\.add\("row-unfocusable"\)/);
     assert.match(sessionHudRenderer, /row\.addEventListener\("dblclick"/);
     assert.match(sessionHudRenderer, /window\.sessionHudAPI\.focusSession\(session\.id\);/);
+  });
+
+  it("opens the remove-session action from a row context menu", () => {
+    assert.match(sessionHudRenderer, /row\.addEventListener\("contextmenu"/);
+    assert.match(sessionHudRenderer, /showSessionMenu\(session\.id\)/);
+    assert.match(sessionHudPreload, /session-hud:show-session-menu/);
   });
 
   it("shows the resolved agent name in each compact row", () => {

@@ -730,6 +730,21 @@ function routeHttpRequest(req, res, remoteProfile = null) {
     }
     if (req.method === "GET" && req.url === "/state") {
       sendStateHealthResponse(res, { getHookServerPort });
+    } else if (req.method === "GET" && req.url && req.url.startsWith("/focus")) {
+      const urlObj = new URL(req.url, "http://127.0.0.1");
+      const index = parseInt(urlObj.searchParams.get("index") || "0", 10);
+      let ok = false;
+      if (typeof ctx.focusSessionByIndex === "function") {
+        ok = !!ctx.focusSessionByIndex(index);
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok, index }));
+    } else if (req.method === "GET" && req.url === "/dashboard") {
+      if (typeof ctx.showDashboard === "function") {
+        ctx.showDashboard();
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
     } else if (req.method === "POST" && req.url === "/state") {
       handleStatePost(req, res, {
         ctx,

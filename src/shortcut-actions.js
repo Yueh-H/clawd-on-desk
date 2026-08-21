@@ -15,6 +15,41 @@
       defaultAccelerator: "CommandOrControl+Shift+Alt+C",
       labelKey: "shortcutLabelTogglePet",
     }),
+    openDashboard: Object.freeze({
+      persistent: true,
+      defaultAccelerator: "CommandOrControl+Shift+Alt+D",
+      labelKey: "shortcutLabelOpenDashboard",
+    }),
+    focusSession1: Object.freeze({
+      persistent: true,
+      defaultAccelerator: "CommandOrControl+Shift+Alt+1",
+      labelKey: "shortcutLabelFocusSession1",
+    }),
+    focusSession2: Object.freeze({
+      persistent: true,
+      defaultAccelerator: "CommandOrControl+Shift+Alt+2",
+      labelKey: "shortcutLabelFocusSession2",
+    }),
+    focusSession3: Object.freeze({
+      persistent: true,
+      defaultAccelerator: "CommandOrControl+Shift+Alt+3",
+      labelKey: "shortcutLabelFocusSession3",
+    }),
+    focusSession4: Object.freeze({
+      persistent: true,
+      defaultAccelerator: "CommandOrControl+Shift+Alt+4",
+      labelKey: "shortcutLabelFocusSession4",
+    }),
+    focusSession5: Object.freeze({
+      persistent: true,
+      defaultAccelerator: "CommandOrControl+Shift+Alt+5",
+      labelKey: "shortcutLabelFocusSession5",
+    }),
+    focusSession6: Object.freeze({
+      persistent: true,
+      defaultAccelerator: "CommandOrControl+Shift+Alt+6",
+      labelKey: "shortcutLabelFocusSession6",
+    }),
     permissionAllow: Object.freeze({
       persistent: false,
       defaultAccelerator: "CommandOrControl+Shift+Y",
@@ -28,16 +63,16 @@
   });
 
   const SHORTCUT_ACTION_IDS = Object.freeze(Object.keys(SHORTCUT_ACTIONS));
-  const MODIFIER_ORDER = Object.freeze(["CommandOrControl", "Shift", "Alt"]);
+  const MODIFIER_ORDER = Object.freeze(["CommandOrControl", "Control", "Shift", "Alt"]);
   const MODIFIER_ALIASES = Object.freeze({
     cmdorctrl: "CommandOrControl",
     cmdorcontrol: "CommandOrControl",
     commandorcontrol: "CommandOrControl",
     commandorctrl: "CommandOrControl",
-    ctrl: "CommandOrControl",
-    control: "CommandOrControl",
     command: "CommandOrControl",
     cmd: "CommandOrControl",
+    ctrl: "CommandOrControl",
+    control: "Control",
     shift: "Shift",
     alt: "Alt",
     option: "Alt",
@@ -81,6 +116,15 @@
     "CommandOrControl+Q",
     "CommandOrControl+W",
     "CommandOrControl+R",
+    "Control+C",
+    "Control+V",
+    "Control+X",
+    "Control+Z",
+    "Control+A",
+    "Control+S",
+    "Control+Q",
+    "Control+W",
+    "Control+R",
     "Alt+F4",
     "F5",
   ]);
@@ -281,6 +325,7 @@
     const mods = [];
     if (isMac) {
       if (metaKey) mods.push("CommandOrControl");
+      if (ctrlKey) mods.push("Control");
     } else if (ctrlKey) {
       mods.push("CommandOrControl");
     }
@@ -304,6 +349,7 @@
     if (!Array.isArray(modifiers) || modifiers.length === 0) return "";
     const labels = modifiers.map((modifier) => {
       if (modifier === "CommandOrControl") return isMac ? "⌘" : "Ctrl";
+      if (modifier === "Control") return isMac ? "⌃" : "Ctrl";
       if (modifier === "Shift") return isMac ? "⇧" : "Shift";
       if (modifier === "Alt") return isMac ? "⌥" : "Alt";
       return modifier;
@@ -321,6 +367,7 @@
 
     const displayParts = parsed.modifiers.map((modifier) => {
       if (modifier === "CommandOrControl") return isMac ? "⌘" : "Ctrl";
+      if (modifier === "Control") return isMac ? "⌃" : "Ctrl";
       if (modifier === "Shift") return isMac ? "⇧" : "Shift";
       if (modifier === "Alt") return isMac ? "⌥" : "Alt";
       return modifier;

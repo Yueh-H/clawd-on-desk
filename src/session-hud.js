@@ -18,8 +18,9 @@ const HUD_WIDTH_LABELS_COMPACT = 400;
 const HUD_CONTEXT_USAGE_WIDTH_BUMP = 36;
 const HUD_LABELS_ONLY_WIDTH_TRIM = 36;
 const HUD_ROW_HEIGHT = 28;
-const HUD_MAX_EXPANDED_ROWS = 6;
-const HUD_MAX_EXPANDED_ROWS_LABELS = 8;
+const HUD_MIN_ROWS = 1;
+const HUD_MAX_ROWS = 24;
+const HUD_DEFAULT_MAX_ROWS = 24;
 const HUD_HEIGHT = HUD_ROW_HEIGHT + HUD_BORDER_Y;
 const HUD_WINDOW_SHELL = Object.freeze({
   top: 2,
@@ -38,6 +39,7 @@ const AUTO_HIDE_POLL_MS = 200;
 const HIDE_GRACE_MS = 500;
 const HIDDEN_WINDOW_DESTROY_MS = 30000;
 const HUD_WIDTH_GROWTH_RATIO = 0.4;
+const ACTIONABLE_IDLE_EVENTS = new Set(["PermissionRequest", "Elicitation", "Notification"]);
 
 function clampToWorkArea(value, min, max) {
   if (max < min) return min;
@@ -52,18 +54,28 @@ function isScreenRect(rect) {
     && Number.isFinite(rect.bottom);
 }
 
-function isHudSession(session) {
-  return !!session && !session.headless && session.state !== "sleeping" && !session.hiddenFromHud;
+function isActionableIdleSession(session) {
+  const rawEvent = session && session.lastEvent && session.lastEvent.rawEvent;
+  return ACTIONABLE_IDLE_EVENTS.has(rawEvent);
 }
 
-function snapshotHasVisibleSessions(snapshot) {
+function isHudSession(session, showIdle = true) {
+  if (!session || session.headless || session.state === "sleeping" || session.hiddenFromHud) return false;
+  const includeIdle = typeof showIdle === "boolean" ? showIdle : true;
+  if (includeIdle) return true;
+  const badge = session.badge || (session.state === "idle" ? "idle" : "running");
+  return badge !== "idle" || isActionableIdleSession(session);
+}
+
+function snapshotHasVisibleSessions(snapshot, showIdle = true) {
   const sessions = Array.isArray(snapshot && snapshot.sessions) ? snapshot.sessions : [];
-  return sessions.some(isHudSession);
+  return sessions.some((session) => isHudSession(session, showIdle));
 }
 
 function evaluateBaseEligible({
   snapshot,
   sessionHudEnabled,
+  sessionHudShowIdle,
   petHidden,
   miniMode,
   miniTransitioning,
@@ -78,7 +90,8 @@ function evaluateBaseEligible({
   // one being eligible reveals the floating UI on a pet click — so the ring can
   // still be checked ("a remote's quota before starting work") even with the
   // Session HUD turned off.
-  const hudEligible = sessionHudEnabled !== false && snapshotHasVisibleSessions(snapshot);
+  const hudEligible = sessionHudEnabled !== false
+    && snapshotHasVisibleSessions(snapshot, sessionHudShowIdle !== false);
   const ringEligible = countQuotaCoins(snapshot, showQuota, hiddenQuotaProviders) > 0;
   return hudEligible || ringEligible;
 }
@@ -122,6 +135,7 @@ function pointInHotZone(point, hotZone) {
 function evaluateShouldShow({
   snapshot,
   sessionHudEnabled,
+  sessionHudShowIdle,
   sessionHudPinned,
   clickRevealed,
   inHotZone,
@@ -136,6 +150,7 @@ function evaluateShouldShow({
   const baseEligible = evaluateBaseEligible({
     snapshot,
     sessionHudEnabled,
+    sessionHudShowIdle,
     petHidden,
     miniMode,
     miniTransitioning,
@@ -156,8 +171,9 @@ function evaluateShouldShow({
   return { show, nextHoldUntil };
 }
 
-function getHudMaxExpandedRows(showStateLabels = true) {
-  return showStateLabels === false ? HUD_MAX_EXPANDED_ROWS : HUD_MAX_EXPANDED_ROWS_LABELS;
+function getHudMaxExpandedRows(value = HUD_DEFAULT_MAX_ROWS) {
+  if (!Number.isInteger(value)) return HUD_DEFAULT_MAX_ROWS;
+  return Math.max(HUD_MIN_ROWS, Math.min(HUD_MAX_ROWS, value));
 }
 
 function computeHudLayout(snapshot, options = {}) {
@@ -170,8 +186,9 @@ function computeHudLayout(snapshot, options = {}) {
   const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
   const orderedSet = new Set(ordered.map((s) => s.id));
   const missing = sessions.filter((s) => !orderedSet.has(s.id));
-  const visible = ordered.concat(missing).filter(isHudSession);
-  const maxExpandedRows = getHudMaxExpandedRows(options.showStateLabels);
+  const showIdle = options.showIdle !== false;
+  const visible = ordered.concat(missing).filter((session) => isHudSession(session, showIdle));
+  const maxExpandedRows = getHudMaxExpandedRows(options.maxRows);
   const expanded = visible.slice(0, maxExpandedRows);
   const folded = visible.slice(maxExpandedRows);
   const rowCount = expanded.length + (folded.length > 0 ? 1 : 0);
@@ -342,6 +359,7 @@ module.exports = function initSessionHud(ctx) {
     return evaluateBaseEligible({
       snapshot,
       sessionHudEnabled: ctx.sessionHudEnabled,
+      sessionHudShowIdle: ctx.sessionHudShowIdle,
       petHidden: ctx.petHidden,
       miniMode: getMiniMode(),
       miniTransitioning: getMiniTransitioning(),
@@ -412,10 +430,11 @@ module.exports = function initSessionHud(ctx) {
     // unscaled expectation makes the auto-hide hot zone smaller than the
     // real window, so the cursor "leaves" while still visually over it.
     const hudEnabled = ctx.sessionHudEnabled !== false;
-    const hasSessions = snapshotHasVisibleSessions(snapshot);
+    const showIdle = ctx.sessionHudShowIdle !== false;
+    const hasSessions = snapshotHasVisibleSessions(snapshot, showIdle);
     let contentBounds = null;
     if (hudEnabled && hasSessions) {
-      const layout = computeHudLayout(snapshot, { showStateLabels: ctx.sessionHudShowStateLabels !== false });
+      const layout = computeHudLayout(snapshot, { maxRows: ctx.sessionHudMaxRows, showIdle });
       const height = computeHudHeight(layout.rowCount);
       const computed = computeSessionHudBounds({ hitRect, anchorRect, workArea, width, height, scale, widthScale });
       contentBounds = computed && computed.contentBounds;
@@ -463,6 +482,7 @@ module.exports = function initSessionHud(ctx) {
     const result = evaluateShouldShow({
       snapshot: latestSnapshot,
       sessionHudEnabled: ctx.sessionHudEnabled,
+      sessionHudShowIdle: ctx.sessionHudShowIdle,
       sessionHudPinned: ctx.sessionHudPinned,
       clickRevealed,
       inHotZone,
@@ -619,6 +639,8 @@ module.exports = function initSessionHud(ctx) {
     if (!hudWindow.webContents || hudWindow.webContents.isDestroyed()) return;
     hudWindow.webContents.send("session-hud:session-snapshot", {
       ...snapshot,
+      hudMaxRows: getHudMaxExpandedRows(ctx.sessionHudMaxRows),
+      hudShowIdle: ctx.sessionHudShowIdle !== false,
       hudShowStateLabels: ctx.sessionHudShowStateLabels !== false,
       hudShowElapsed: ctx.sessionHudShowElapsed !== false,
       hudShowContextUsage: ctx.sessionHudShowContextUsage !== false,
@@ -862,7 +884,10 @@ module.exports = function initSessionHud(ctx) {
     const workArea = typeof ctx.getNearestWorkArea === "function"
       ? ctx.getNearestWorkArea(cx, cy)
       : { x: 0, y: 0, width: 1280, height: 800 };
-    const layout = computeHudLayout(snapshot, { showStateLabels: ctx.sessionHudShowStateLabels !== false });
+    const layout = computeHudLayout(snapshot, {
+      maxRows: ctx.sessionHudMaxRows,
+      showIdle: ctx.sessionHudShowIdle !== false,
+    });
     const height = computeHudHeight(layout.rowCount);
     const width = getHudWidth(
       ctx.sessionHudShowElapsed !== false,
@@ -924,7 +949,7 @@ module.exports = function initSessionHud(ctx) {
     // ── Session HUD (sessions only; gated by its own master, independent of
     // the quota ring) ──
     const hudEnabled = ctx.sessionHudEnabled !== false;
-    const hasSessions = snapshotHasVisibleSessions(snapshot);
+    const hasSessions = snapshotHasVisibleSessions(snapshot, ctx.sessionHudShowIdle !== false);
     const hudComputed = show && hudEnabled && hasSessions ? computeBounds(snapshot, scale) : null;
     if (!hudComputed) {
       hideSessionHud();
@@ -956,7 +981,7 @@ module.exports = function initSessionHud(ctx) {
     const scale = getTextScale();
     const hudComputed = shouldShow(snapshot)
       && ctx.sessionHudEnabled !== false
-      && snapshotHasVisibleSessions(snapshot)
+      && snapshotHasVisibleSessions(snapshot, ctx.sessionHudShowIdle !== false)
       ? computeBounds(snapshot, scale)
       : null;
     syncQuotaRing(snapshot, scale, hudComputed ? hudComputed.contentBounds : null, {
@@ -1040,8 +1065,9 @@ module.exports.__test = {
     HUD_LABELS_ONLY_WIDTH_TRIM,
     HUD_HEIGHT,
     HUD_ROW_HEIGHT,
-    HUD_MAX_EXPANDED_ROWS,
-    HUD_MAX_EXPANDED_ROWS_LABELS,
+    HUD_MIN_ROWS,
+    HUD_MAX_ROWS,
+    HUD_DEFAULT_MAX_ROWS,
     HUD_WINDOW_SHELL,
     HUD_PET_GAP,
     BUBBLE_GAP,

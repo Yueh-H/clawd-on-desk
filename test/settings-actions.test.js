@@ -144,7 +144,7 @@ describe("updateRegistry pure-data validators", () => {
   it("function-form boolean fields reject non-booleans", () => {
     const deps = { snapshot: baseSnapshot };
     for (const key of [
-      "sessionHudEnabled", "sessionHudShowElapsed", "sessionHudShowContextUsage", "sessionHudShowQuota", "sessionHudCleanupDetached",
+      "sessionHudEnabled", "sessionHudShowIdle", "sessionHudShowElapsed", "sessionHudShowContextUsage", "sessionHudShowQuota", "sessionHudCleanupDetached",
       "sessionHudShowStateLabels", "sessionHudPinned",
       "miniMode", "openAtLoginHydrated", "soundMuted", "bubbleFollowPet",
       "hideBubbles", "permissionBubblesEnabled", "lowPowerIdleMode",
@@ -163,6 +163,15 @@ describe("updateRegistry pure-data validators", () => {
     assert.strictEqual(updateRegistry.quotaRingDisplayMode("remaining").status, "ok");
     assert.strictEqual(updateRegistry.quotaRingDisplayMode("available").status, "error");
     assert.strictEqual(updateRegistry.quotaRingDisplayMode(true).status, "error");
+  });
+
+  it("accepts only integer Session HUD row limits from 1 through 24", () => {
+    assert.strictEqual(updateRegistry.sessionHudMaxRows(1).status, "ok");
+    assert.strictEqual(updateRegistry.sessionHudMaxRows(24).status, "ok");
+    assert.strictEqual(updateRegistry.sessionHudMaxRows(0).status, "error");
+    assert.strictEqual(updateRegistry.sessionHudMaxRows(25).status, "error");
+    assert.strictEqual(updateRegistry.sessionHudMaxRows(12.5).status, "error");
+    assert.strictEqual(updateRegistry.sessionHudMaxRows("24").status, "error");
   });
 
   it("codexHookHealthLastNotified accepts strings and empty reset", () => {
@@ -2168,6 +2177,13 @@ describe("shortcut commands", () => {
         globalShortcut,
         shortcutHandlers: {
           togglePet: () => {},
+          openDashboard: () => {},
+          focusSession1: () => {},
+          focusSession2: () => {},
+          focusSession3: () => {},
+          focusSession4: () => {},
+          focusSession5: () => {},
+          focusSession6: () => {},
           permissionAllow: () => {},
           permissionDeny: () => {},
         },
@@ -2232,6 +2248,13 @@ describe("shortcut commands", () => {
     }, deps);
     assert.strictEqual(dangerous.status, "error");
     assert.match(dangerous.message, /reserved accelerator/);
+
+    const physicalControlDangerous = commandRegistry.registerShortcut({
+      actionId: "togglePet",
+      accelerator: "Control+C",
+    }, deps);
+    assert.strictEqual(physicalControlDangerous.status, "error");
+    assert.match(physicalControlDangerous.message, /reserved accelerator/);
   });
 
   it("registerShortcut short-circuits idempotent writes", () => {

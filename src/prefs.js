@@ -166,6 +166,12 @@ const SCHEMA = {
   openAtLoginHydrated: { type: "boolean", default: false },
   bubbleFollowPet: { type: "boolean", default: false },
   sessionHudEnabled: { type: "boolean", default: true },
+  sessionHudMaxRows: {
+    type: "number",
+    default: 24,
+    validate: (v) => Number.isInteger(v) && v >= 1 && v <= 24,
+  },
+  sessionHudShowIdle: { type: "boolean", default: false },
   sessionHudShowStateLabels: { type: "boolean", default: true },
   sessionHudShowElapsed: { type: "boolean", default: false },
   sessionHudShowContextUsage: { type: "boolean", default: true },

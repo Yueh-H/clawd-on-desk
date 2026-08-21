@@ -8,6 +8,19 @@ const os = require("os");
 
 const prefs = require("../src/prefs");
 
+const EXPECTED_SHORTCUT_DEFAULTS = {
+  togglePet: "CommandOrControl+Shift+Alt+C",
+  openDashboard: "CommandOrControl+Shift+Alt+D",
+  focusSession1: "CommandOrControl+Shift+Alt+1",
+  focusSession2: "CommandOrControl+Shift+Alt+2",
+  focusSession3: "CommandOrControl+Shift+Alt+3",
+  focusSession4: "CommandOrControl+Shift+Alt+4",
+  focusSession5: "CommandOrControl+Shift+Alt+5",
+  focusSession6: "CommandOrControl+Shift+Alt+6",
+  permissionAllow: "CommandOrControl+Shift+Y",
+  permissionDeny: "CommandOrControl+Shift+N",
+};
+
 const tempDirs = [];
 
 function makeTempPath(name = "clawd-prefs.json") {
@@ -60,6 +73,8 @@ describe("prefs.getDefaults", () => {
     assert.strictEqual(d.freeRoam, false);
     assert.strictEqual(d.roamConstrainAxis, false);
     assert.strictEqual(d.sessionHudEnabled, true);
+    assert.strictEqual(d.sessionHudMaxRows, 24);
+    assert.strictEqual(d.sessionHudShowIdle, false);
     assert.strictEqual(d.sessionHudShowStateLabels, true);
     assert.strictEqual(d.sessionHudShowElapsed, false);
     assert.strictEqual(d.sessionHudShowContextUsage, true);
@@ -277,6 +292,8 @@ describe("prefs.validate", () => {
       x: NaN,                // not finite
       bubbleFollowPet: true, // ok
       sessionHudEnabled: "yes",
+      sessionHudMaxRows: 25,
+      sessionHudShowIdle: "yes",
       sessionHudShowStateLabels: "yes",
       sessionHudShowElapsed: "yes",
       sessionHudShowContextUsage: "yes",
@@ -304,6 +321,8 @@ describe("prefs.validate", () => {
     assert.strictEqual(v.x, 0);
     assert.strictEqual(v.bubbleFollowPet, true);
     assert.strictEqual(v.sessionHudEnabled, true);
+    assert.strictEqual(v.sessionHudMaxRows, 24);
+    assert.strictEqual(v.sessionHudShowIdle, false);
     assert.strictEqual(v.sessionHudShowStateLabels, true);
     assert.strictEqual(v.sessionHudShowElapsed, false);
     assert.strictEqual(v.sessionHudShowContextUsage, true);
@@ -429,6 +448,8 @@ describe("prefs.validate", () => {
       lowPowerIdleMode: true,
       bubbleFollowPet: true,
       sessionHudEnabled: false,
+      sessionHudMaxRows: 18,
+      sessionHudShowIdle: true,
       sessionHudShowStateLabels: false,
       sessionHudShowElapsed: false,
       sessionHudShowContextUsage: false,
@@ -455,6 +476,8 @@ describe("prefs.validate", () => {
     assert.strictEqual(v.lowPowerIdleMode, true);
     assert.strictEqual(v.bubbleFollowPet, true);
     assert.strictEqual(v.sessionHudEnabled, false);
+    assert.strictEqual(v.sessionHudMaxRows, 18);
+    assert.strictEqual(v.sessionHudShowIdle, true);
     assert.strictEqual(v.sessionHudShowStateLabels, false);
     assert.strictEqual(v.sessionHudShowElapsed, false);
     assert.strictEqual(v.sessionHudShowContextUsage, false);
@@ -931,11 +954,7 @@ describe("prefs.validate", () => {
 
   it("shortcuts defaults to the built-in shortcut map", () => {
     const d = prefs.getDefaults();
-    assert.deepStrictEqual(d.shortcuts, {
-      togglePet: "CommandOrControl+Shift+Alt+C",
-      permissionAllow: "CommandOrControl+Shift+Y",
-      permissionDeny: "CommandOrControl+Shift+N",
-    });
+    assert.deepStrictEqual(d.shortcuts, EXPECTED_SHORTCUT_DEFAULTS);
   });
 
   it("shortcuts fills missing keys and normalizes valid values", () => {
@@ -945,9 +964,8 @@ describe("prefs.validate", () => {
       },
     });
     assert.deepStrictEqual(v.shortcuts, {
+      ...EXPECTED_SHORTCUT_DEFAULTS,
       togglePet: "CommandOrControl+K",
-      permissionAllow: "CommandOrControl+Shift+Y",
-      permissionDeny: "CommandOrControl+Shift+N",
     });
   });
 
@@ -959,11 +977,7 @@ describe("prefs.validate", () => {
         permissionDeny: 42,
       },
     });
-    assert.deepStrictEqual(v.shortcuts, {
-      togglePet: "CommandOrControl+Shift+Alt+C",
-      permissionAllow: "CommandOrControl+Shift+Y",
-      permissionDeny: "CommandOrControl+Shift+N",
-    });
+    assert.deepStrictEqual(v.shortcuts, EXPECTED_SHORTCUT_DEFAULTS);
   });
 
   it("shortcuts de-duplicates conflicting load-time values with default priority", () => {
@@ -975,9 +989,8 @@ describe("prefs.validate", () => {
       },
     });
     assert.deepStrictEqual(v.shortcuts, {
+      ...EXPECTED_SHORTCUT_DEFAULTS,
       togglePet: "CommandOrControl+K",
-      permissionAllow: "CommandOrControl+Shift+Y",
-      permissionDeny: "CommandOrControl+Shift+N",
     });
   });
 

@@ -798,6 +798,15 @@ function focusUnavailableText(session) {
   return t(focusUnavailableReasonKey(session));
 }
 
+function focusActionText(session) {
+  const focusTargetType = session.focusTarget && session.focusTarget.type;
+  if (focusTargetType === "codex-thread") return t("dashboardOpenCodexSession");
+  if (session.agentId === "claude-code" && !session.host && session.platform !== "webui") {
+    return t("dashboardOpenClaudeSession");
+  }
+  return t("dashboardJumpTerminal");
+}
+
 function openFolderFailureText(result) {
   if (result && result.status === "error" && result.message) {
     return t("sessionOpenFolderFailed").replace("{reason}", result.message);
@@ -864,10 +873,7 @@ function createCard(session, now) {
   actions.className = "actions";
   const button = document.createElement("button");
   button.type = "button";
-  const focusTargetType = session.focusTarget && session.focusTarget.type;
-  button.textContent = focusTargetType === "codex-thread"
-    ? t("dashboardOpenCodexSession")
-    : t("dashboardJumpTerminal");
+  button.textContent = focusActionText(session);
   button.disabled = session.canFocus !== true;
   if (button.disabled) {
     button.title = focusUnavailableText(session);

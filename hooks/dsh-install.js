@@ -226,8 +226,19 @@ async function whereCommand(command, options = {}) {
   return (await whereCommands(command, options))[0] || null;
 }
 
+function pathApiForPlatformPath(platform, value) {
+  if (
+    platform === "win32"
+    && process.platform !== "win32"
+    && path.posix.isAbsolute(String(value || ""))
+  ) {
+    return path.posix;
+  }
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
 function expandShimCandidate(candidate, shim, platform) {
-  const pathApi = platform === "win32" ? path.win32 : path.posix;
+  const pathApi = pathApiForPlatformPath(platform, shim);
   const shimDir = pathApi.dirname(shim);
   let expanded = String(candidate || "")
     .trim()
@@ -237,6 +248,12 @@ function expandShimCandidate(candidate, shim, platform) {
     .replace(/\$PSScriptRoot/gi, shimDir);
   // Strip command syntax that may precede an unquoted path in a shim line.
   expanded = expanded.replace(/^(?:exec\s+)?(?:node(?:\.exe)?\s+|&\s*)/i, "").trim();
+  // Cross-platform tests may feed a real POSIX temp path containing a Windows
+  // .cmd shim. Keep Windows command parsing, but address that real fixture via
+  // its host path separators so fs inspection remains meaningful.
+  if (platform === "win32" && pathApi === path.posix) {
+    expanded = expanded.replace(/\\/g, "/");
+  }
   if (!pathApi.isAbsolute(expanded)) expanded = pathApi.resolve(shimDir, expanded);
   return pathApi.normalize(expanded);
 }
@@ -523,7 +540,6 @@ function dshCommandPathsSync(options = {}) {
   const fsImpl = options.fs || fs;
   const env = options.env || process.env;
   const platform = options.platform || process.platform;
-  const pathApi = platform === "win32" ? path.win32 : path.posix;
   const pathValue = typeof env.PATH === "string" && env.PATH.trim()
     ? env.PATH
     : (typeof env.Path === "string" ? env.Path : "");
@@ -533,6 +549,7 @@ function dshCommandPathsSync(options = {}) {
   const separator = platform === "win32" ? ";" : ":";
   const results = [];
   for (const entry of pathValue.split(separator).map((value) => value.trim()).filter(Boolean)) {
+    const pathApi = pathApiForPlatformPath(platform, entry);
     for (const name of names) {
       const candidate = pathApi.join(entry, name);
       try {
@@ -546,8 +563,8 @@ function dshCommandPathsSync(options = {}) {
 function resolveDshInstallRootSync(options = {}) {
   const fsImpl = options.fs || fs;
   const platform = options.platform || process.platform;
-  const pathApi = platform === "win32" ? path.win32 : path.posix;
   for (const shim of dshCommandPathsSync(options)) {
+    const pathApi = pathApiForPlatformPath(platform, shim);
     let realShim = shim;
     try { realShim = fsImpl.realpathSync(shim); } catch {}
     const normalized = realShim.replace(/\\/g, "/");
@@ -593,14 +610,38 @@ function isIntactManaged(record) {
     && record.actualBundleHash === record.clawdManifest.bundleHash;
 }
 
-function isManagedGenerationRecord(record, managedRoot) {
+function normalizeComparablePath(value, platform = process.platform) {
+  if (typeof value !== "string" || !value) return "";
+  const pathApi = pathApiForPlatformPath(platform, value);
+  let resolved = pathApi.resolve(value);
+
+  // macOS exposes /var (and /tmp) through a top-level system symlink. Package
+  // inspection intentionally resolves the full target, while managedRoot is a
+  // lexical namespace path. Resolve only the first path component here: this
+  // treats /var and /private/var as the same host root without following a
+  // generation-level symlink that could escape the managed namespace.
+  if (pathApi === path.posix && process.platform !== "win32") {
+    const parts = resolved.split("/").filter(Boolean);
+    if (parts.length > 0) {
+      try {
+        const topLevel = fs.realpathSync(path.posix.join("/", parts[0]));
+        resolved = path.posix.join(topLevel, ...parts.slice(1));
+      } catch {}
+    }
+  }
+
+  return platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isManagedGenerationRecord(record, managedRoot, platform = process.platform) {
   if (!isIntactManaged(record) || !managedRoot) return false;
-  const expected = path.resolve(
+  const expected = path.join(
     managedRoot,
     "generations",
     record.clawdManifest.bundleHash
   );
-  return path.resolve(record.packageDir) === expected;
+  return normalizeComparablePath(record.packageDir, platform)
+    === normalizeComparablePath(expected, platform);
 }
 
 function classifyDeepSeekHarnessProfile({
@@ -615,6 +656,7 @@ function classifyDeepSeekHarnessProfile({
   sourcePath,
   managedRoot,
   expectedHash,
+  platform = process.platform,
 }) {
   const dependencies = profileManifest.dependencies && typeof profileManifest.dependencies === "object"
     ? profileManifest.dependencies
@@ -635,8 +677,8 @@ function classifyDeepSeekHarnessProfile({
   const resolved = installationResolved || profileResolved || effectiveFallbackResolved;
   const profileOwned = isIntactManaged(profileResolved);
   const fallbackOwned = isIntactManaged(effectiveFallbackResolved);
-  const sourceOwned = isManagedGenerationRecord(sourceResolved, managedRoot);
-  const managedGenerationOwned = isManagedGenerationRecord(managedGenerationResolved, managedRoot);
+  const sourceOwned = isManagedGenerationRecord(sourceResolved, managedRoot, platform);
+  const managedGenerationOwned = isManagedGenerationRecord(managedGenerationResolved, managedRoot, platform);
   const ownershipRecord = sourceOwned
     ? sourceResolved
     : (managedGenerationOwned ? managedGenerationResolved : null);
@@ -791,6 +833,7 @@ function inspectDeepSeekHarnessDiskSync(options = {}) {
     sourcePath,
     managedRoot,
     expectedHash,
+    platform: options.platform || process.platform,
   });
   const sourceAwareHealth = verifyCurrentSource && !expectedHash && health.owned
     ? { ...health, status: "source-unavailable" }
@@ -880,6 +923,7 @@ async function inspectDeepSeekHarnessIntegration(options = {}) {
     sourcePath,
     managedRoot,
     expectedHash: options.expectedHash,
+    platform: options.platform || process.platform,
   });
 }
 
@@ -1554,11 +1598,8 @@ function hasMutableManagedState(health) {
 
 function sameResolvedPath(left, right, platform = process.platform) {
   if (!left || !right) return false;
-  const normalize = (value) => {
-    const resolved = path.resolve(value);
-    return platform === "win32" ? resolved.toLowerCase() : resolved;
-  };
-  return normalize(left) === normalize(right);
+  return normalizeComparablePath(left, platform)
+    === normalizeComparablePath(right, platform);
 }
 
 async function unlinkManagedProfileResidue(health, options = {}) {
@@ -1581,7 +1622,7 @@ async function unlinkManagedProfileResidue(health, options = {}) {
     health.marker.bundleHash
   );
   if (
-    !isManagedGenerationRecord(health.profileResolved, managedRoot)
+    !isManagedGenerationRecord(health.profileResolved, managedRoot, options.platform || process.platform)
     || !sameResolvedPath(health.profileResolved.packageDir, expectedGeneration, options.platform)
   ) {
     return { removed: false, reason: "residue-target-mismatch" };

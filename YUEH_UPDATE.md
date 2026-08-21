@@ -25,8 +25,11 @@ below before they reach the running app.
 6. Run the focused HUD/focus/session tests, syntax checks, and `git diff --check`.
    Also run the full test suite; a failure is acceptable only when the same failure is
    reproduced from a clean `upstream/main` checkout and documented as an upstream baseline.
-7. Render the Session HUD and verify: eight visible rows, longer titles, agent labels,
-   right-side status/usage chips, and double-click focus.
+7. Render the Session HUD and verify: the configured visible-row limit (default 24), idle rows hidden by default while actionable waiting rows remain, longer titles, agent labels,
+   right-side status/usage chips, and double-click focus. A Codex row must open the
+   matching Codex task; a Claude Desktop-launched Claude Code row must open the
+   matching Claude code session. An unmapped Claude Code row must fall back to its
+   source terminal/app instead of importing or guessing a conversation.
 8. Commit the merge or conflict resolution, push `origin/codex/yueh-custom`, verify the
    remote commit, then relaunch Clawd from the active custom checkout.
 
@@ -36,5 +39,24 @@ below before they reach the running app.
   targets the original repository and can remove custom UI behavior.
 - Do not run updater operations from the legacy dirty checkout.
 - Do not stage `*.bak*`, force-push, or hide a failed validation.
+- Claude's exact-session jump intentionally resolves `cliSessionId` through Claude
+  Desktop's local `claude-code-sessions` metadata before opening its `epitaxy` deep
+  link. If a Claude Desktop update changes either contract, keep terminal fallback
+  working and revalidate the route; do not replace it with `claude://resume`, which
+  can import a duplicate session.
+- Dynamic Session Focus & Keypad HTTP Bridge:
+  - Added `/focus?index=0..5` and `/dashboard` HTTP GET endpoints in `src/server.js`.
+  - Added `focusSessionByIndex(index)` in `src/main.js` which queries `_state.buildSessionSnapshot()` for the active HUD order.
+  - Keep macOS generic focus on the established `open <bundle>` path; only fall
+    back to System Events when bundle resolution or `open` fails. Do not add an
+    unconditional AppleScript activation after a successful `open`.
+  - KeySilk 12-key hardware (`Keyslik_configured.ckf`) maps Key 1~6 to `Option + 1~6` and Key 10 to `Option + K`, bridged by Hammerspoon (`~/.hammerspoon/init.lua`) into the local HTTP endpoints silently.
+- Shortcut portability:
+  - Cross-platform defaults use Electron's `CommandOrControl` (`⌘` on macOS,
+    `Ctrl` on Windows/Linux).
+  - A physical macOS Control key is stored as `Control` and rendered as `⌃`;
+    Windows/Linux Ctrl recording remains `CommandOrControl`.
+  - Keep both `CommandOrControl` and physical `Control` variants of common
+    destructive/global editing combinations on the reserved-shortcut list.
 - If an upstream conflict changes runtime behavior, stop before push until the custom
   behavior is restored and revalidated.

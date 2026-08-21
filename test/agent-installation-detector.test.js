@@ -188,7 +188,7 @@ describe("agent installation detector", () => {
     dsh = byId(report, "deepseek-harness");
     assert.strictEqual(dsh.clawdIntegration.detected, true);
     assert.strictEqual(dsh.clawdIntegration.reason, "managed-plugin");
-    assert.strictEqual(dsh.clawdIntegration.paths.pluginDir, pluginDir);
+    assert.strictEqual(dsh.clawdIntegration.paths.pluginDir, fs.realpathSync(pluginDir));
   });
 
   it("detects a DSH CLI on PATH before the profile home is initialized", () => {

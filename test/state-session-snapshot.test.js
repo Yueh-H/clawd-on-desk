@@ -95,7 +95,7 @@ function session(state, overrides = {}) {
 }
 
 describe("startup-recovered session snapshots", () => {
-  it("exposes the marker, disables focus, and includes marker changes in the signature", () => {
+  it("exposes the marker, preserves verified source focus, and includes marker changes in the signature", () => {
     const recovered = buildSessionSnapshot(new Map([
       ["real-session", session("working", { sourcePid: 123, startupRecovered: true })],
     ]), { statePriority: STATE_PRIORITY });
@@ -104,8 +104,8 @@ describe("startup-recovered session snapshots", () => {
     ]), { statePriority: STATE_PRIORITY });
 
     assert.strictEqual(recovered.sessions[0].startupRecovered, true);
-    assert.strictEqual(recovered.sessions[0].canFocus, false);
-    assert.strictEqual(recovered.sessions[0].focusTarget, null);
+    assert.strictEqual(recovered.sessions[0].canFocus, true);
+    assert.deepStrictEqual(recovered.sessions[0].focusTarget, { type: "terminal", url: null });
     assert.strictEqual(live.sessions[0].startupRecovered, false);
     assert.notStrictEqual(sessionSnapshotSignature(recovered), sessionSnapshotSignature(live));
   });

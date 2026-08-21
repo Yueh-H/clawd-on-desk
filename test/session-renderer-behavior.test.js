@@ -89,6 +89,8 @@ function translations() {
     dashboardWindowTitle: "Sessions",
     dashboardCount: "{n} active",
     dashboardJumpTerminal: "Jump",
+    dashboardOpenClaudeSession: "Open Claude Session",
+    dashboardOpenCodexSession: "Open Codex Session",
     dashboardOpenFolder: "Open Folder",
     dashboardUnknownAgent: "Unknown",
     sessionFocusUnavailableRemote: "Remote sessions cannot focus a terminal on this computer.",
@@ -99,6 +101,7 @@ function translations() {
     sessionJustNow: "now",
     sessionHudElapsedSec: "{n}s",
     sessionHudDoubleClickToFocus: "Double-click to open this session",
+    sessionHudDeleteSession: "Remove from Clawd",
     sessionMinAgo: "{n}m",
     sessionHrAgo: "{n}h",
     sessionBadgeIdle: "Idle",
@@ -212,11 +215,12 @@ async function loadDashboard(
   };
 }
 
-async function loadHud(sessions, openResult = { status: "ok" }) {
+async function loadHud(sessions, openResult = { status: "ok" }, snapshotOverrides = {}) {
   const document = createDocument(["hud"]);
   const openCalls = [];
   const focusCalls = [];
   const ackCalls = [];
+  const sessionMenuCalls = [];
   let snapshotListener = null;
   let feedbackTimeout = null;
   const api = {
@@ -228,6 +232,10 @@ async function loadHud(sessions, openResult = { status: "ok" }) {
       return typeof openResult === "function" ? openResult(...args) : openResult;
     },
     focusSession: (...args) => { focusCalls.push(args); },
+    showSessionMenu: async (...args) => {
+      sessionMenuCalls.push(args);
+      return { status: "ok" };
+    },
     ackCompletion: async (...args) => {
       ackCalls.push(args);
       return { status: "noop" };
@@ -244,15 +252,17 @@ async function loadHud(sessions, openResult = { status: "ok" }) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", "session-focus-unavailable.js"), "utf8"), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "src", "session-hud-renderer.js"), "utf8"), context);
   await flush();
-  snapshotListener({ sessions, orderedIds: sessions.map((entry) => entry.id) });
+  snapshotListener({ sessions, orderedIds: sessions.map((entry) => entry.id), ...snapshotOverrides });
   return {
     root: document.elements.get("hud"),
     openCalls,
     focusCalls,
     ackCalls,
+    sessionMenuCalls,
     pushSnapshot: (nextSessions = sessions) => snapshotListener({
       sessions: nextSessions,
       orderedIds: nextSessions.map((entry) => entry.id),
+      ...snapshotOverrides,
     }),
     expireFeedback: async () => {
       const callback = feedbackTimeout;
@@ -262,6 +272,18 @@ async function loadHud(sessions, openResult = { status: "ok" }) {
     },
   };
 }
+
+test("HUD right-click requests the native remove-session menu without focusing", async () => {
+  const hud = await loadHud([session("active", { state: "working", badge: "running", canFocus: true })]);
+  const row = byClass(hud.root, "row")[0];
+
+  await row.dispatch("contextmenu");
+  await flush();
+
+  assert.deepStrictEqual(hud.sessionMenuCalls, [["active"]]);
+  assert.deepStrictEqual(hud.focusCalls, []);
+  assert.deepStrictEqual(hud.ackCalls, []);
+});
 
 test("Dashboard renders local/remote/webui reasons and only local folder action", async () => {
   const { root } = await loadDashboard([
@@ -344,6 +366,23 @@ test("Dashboard keeps curated labels for built-in agents", async () => {
   const renderedText = meta.children.map((child) => child.textContent || "").join("");
   assert.match(renderedText, /Codex/);
   assert.doesNotMatch(renderedText, /Codex CLI/);
+});
+
+test("Dashboard labels exact app session focus separately from terminal focus", async () => {
+  const { root } = await loadDashboard([
+    session("claude", { agentId: "claude-code", canFocus: true }),
+    session("codex", {
+      agentId: "codex",
+      canFocus: true,
+      focusTarget: { type: "codex-thread" },
+    }),
+    session("terminal", { agentId: "gemini-cli", canFocus: true }),
+  ]);
+
+  assert.deepStrictEqual(
+    byClass(root, "actions").map((actions) => actions.children[0].textContent),
+    ["Open Claude Session", "Open Codex Session", "Jump"]
+  );
 });
 
 test("Dashboard folder click sends only id and exposes open failure", async () => {
@@ -488,6 +527,20 @@ test("HUD shows the agent name and focuses only after a row double-click", async
   assert.deepStrictEqual(harness.ackCalls, [["focusable"]]);
 });
 
+test("HUD hides ordinary idle rows but keeps sessions waiting for input", async () => {
+  const { root } = await loadHud([
+    session("idle"),
+    session("waiting", { lastEvent: { rawEvent: "Elicitation" } }),
+    session("running", { state: "working", badge: "running" }),
+    session("done", { badge: "done" }),
+  ], undefined, { hudShowIdle: false });
+
+  assert.deepStrictEqual(
+    byClass(root, "title").map((element) => element.textContent),
+    ["waiting", "running", "done"]
+  );
+});
+
 test("HUD folder click sends only id and exposes open failure", async () => {
   const { root, openCalls } = await loadHud([session("local")], { status: "not-available" });
   await byClass(root, "open-folder-button")[0].dispatch("click");
@@ -532,6 +585,7 @@ test("HUD interaction and folder feedback copy exists in all supported languages
   const keys = [
     "dashboardOpenFolder",
     "sessionHudDoubleClickToFocus",
+    "sessionHudDeleteSession",
     "sessionOpenFolderFailed",
     "sessionOpenFolderUnavailable",
     "sessionFocusUnavailableRemote",

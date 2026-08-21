@@ -281,6 +281,8 @@ function createSettingsEffectRouter(options = {}) {
     }
     if (
       "sessionHudEnabled" in changes
+      || "sessionHudMaxRows" in changes
+      || "sessionHudShowIdle" in changes
       || "sessionHudShowStateLabels" in changes
       || "sessionHudShowElapsed" in changes
       || "sessionHudShowContextUsage" in changes

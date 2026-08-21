@@ -280,7 +280,8 @@ describe("restoreSessionFromLease()", () => {
     const entry = api.buildSessionSnapshot().sessions[0];
     assert.strictEqual(entry.id, sessionId);
     assert.strictEqual(entry.startupRecovered, true);
-    assert.strictEqual(entry.canFocus, false);
+    assert.strictEqual(entry.canFocus, true);
+    assert.deepStrictEqual(entry.focusTarget, { type: "terminal", url: null });
   });
 
   it("lets the next real hook update the same canonical id, then SessionEnd removes it", () => {
@@ -2254,11 +2255,11 @@ describe("updateSession()", () => {
   });
 
   it("Codex PermissionRequest focus metadata respects the session cap", () => {
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 32; i++) {
       update(api, { id: `s${i}`, state: "working" });
       mock.timers.tick(1);
     }
-    assert.strictEqual(api.sessions.size, 20);
+    assert.strictEqual(api.sessions.size, 32);
 
     update(api, {
       id: "codex:019e115a-4df2-7ed0-b90e-8e6345aca777",
@@ -2269,7 +2270,7 @@ describe("updateSession()", () => {
       codexOriginator: "Codex Desktop",
     });
 
-    assert.strictEqual(api.sessions.size, 20);
+    assert.strictEqual(api.sessions.size, 32);
     assert.ok(api.sessions.has("codex:019e115a-4df2-7ed0-b90e-8e6345aca777"));
     assert.ok(!api.sessions.has("s0"));
   });
@@ -2442,13 +2443,13 @@ describe("updateSession()", () => {
     assert.strictEqual(api.resolveDisplayState(), "idle");
   });
 
-  it("session count > MAX_SESSIONS(20) → evicts oldest", () => {
-    for (let i = 0; i < 20; i++) {
+  it("session count > MAX_SESSIONS(32) → evicts oldest", () => {
+    for (let i = 0; i < 32; i++) {
       update(api, { id: `s${i}`, state: "working" });
     }
-    assert.strictEqual(api.sessions.size, 20);
+    assert.strictEqual(api.sessions.size, 32);
     update(api, { id: "s_new", state: "working" });
-    assert.strictEqual(api.sessions.size, 20);
+    assert.strictEqual(api.sessions.size, 32);
     assert.ok(api.sessions.has("s_new"));
   });
 
@@ -5194,6 +5195,7 @@ describe("requiresCompletionAck lifecycle", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("evictOldestSessionIfNeeded two-phase", () => {
+  const CAPACITY = 32;
   let api;
   beforeEach(() => { api = require("../src/state")(makeCtx()); });
   afterEach(() => { api.cleanup(); });
@@ -5217,24 +5219,24 @@ describe("evictOldestSessionIfNeeded two-phase", () => {
   }
 
   it("prefers the oldest non-ack session when capacity is hit", () => {
-    // 19 ack-pending + 1 non-ack. Adding the 21st (capacity = 20) must
+    // 31 ack-pending + 1 non-ack. Adding the 33rd (capacity = 32) must
     // evict the non-ack oldest, not any of the ack-pending sessions.
-    seed(api, 20, new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]));
-    // s19 is non-ack and oldest of the non-ack group (only one).
+    seed(api, CAPACITY, new Set(Array.from({ length: CAPACITY - 1 }, (_value, index) => index)));
+    // s31 is non-ack and oldest of the non-ack group (only one).
     update(api, { id: "s-new", state: "working", event: "PreToolUse", agentId: "claude-code" });
-    assert.strictEqual(api.sessions.has("s19"), false, "s19 (non-ack) should have been evicted");
-    // All 19 ack-pending entries survived
-    for (let i = 0; i <= 18; i++) {
+    assert.strictEqual(api.sessions.has("s31"), false, "s31 (non-ack) should have been evicted");
+    // All 31 ack-pending entries survived.
+    for (let i = 0; i < CAPACITY - 1; i++) {
       assert.strictEqual(api.sessions.has(`s${i}`), true, `s${i} ack-pending should survive`);
     }
   });
 
   it("evicts the oldest ack-pending session only when every entry is ack-pending", () => {
-    seed(api, 20, new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]));
+    seed(api, CAPACITY, new Set(Array.from({ length: CAPACITY }, (_value, index) => index)));
     update(api, { id: "s-new", state: "working", event: "PreToolUse", agentId: "claude-code" });
     // s0 is oldest ack-pending (smallest updatedAt) — must be the victim.
     assert.strictEqual(api.sessions.has("s0"), false, "oldest ack-pending should be evicted as fallback");
-    for (let i = 1; i <= 19; i++) {
+    for (let i = 1; i < CAPACITY; i++) {
       assert.strictEqual(api.sessions.has(`s${i}`), true);
     }
   });

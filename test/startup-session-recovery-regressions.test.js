@@ -86,7 +86,7 @@ describe("startup session recovery regressions", () => {
   it("does not evict any real session when recovery starts at capacity", () => {
     state = makeState();
     const existing = new Map();
-    for (let index = 0; index < 20; index += 1) {
+    for (let index = 0; index < 32; index += 1) {
       const id = `live-session-${index}`;
       const session = { state: "working", startupRecovered: undefined };
       existing.set(id, session);
@@ -108,7 +108,7 @@ describe("startup session recovery regressions", () => {
     });
 
     assert.strictEqual(restored, false);
-    assert.strictEqual(state.sessions.size, 20);
+    assert.strictEqual(state.sessions.size, 32);
     assert.strictEqual(state.sessions.has("recovered-session"), false);
     for (const [id, session] of existing) {
       assert.strictEqual(state.sessions.get(id), session, `${id} must remain untouched`);

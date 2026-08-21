@@ -16,6 +16,7 @@ function registerSessionIpc(options = {}) {
   const getI18n = requiredDependency(options.getI18n, "getI18n");
   const focusSession = requiredDependency(options.focusSession, "focusSession");
   const hideSession = requiredDependency(options.hideSession, "hideSession");
+  const showSessionHudMenu = requiredDependency(options.showSessionHudMenu, "showSessionHudMenu");
   const setSessionAlias = requiredDependency(options.setSessionAlias, "setSessionAlias");
   const showDashboard = requiredDependency(options.showDashboard, "showDashboard");
   const setSessionHudPinned = requiredDependency(options.setSessionHudPinned, "setSessionHudPinned");
@@ -124,6 +125,12 @@ function registerSessionIpc(options = {}) {
   });
 
   handle("session-hud:get-i18n", () => getI18n());
+  handle("session-hud:show-session-menu", (event, sessionId) => {
+    if (typeof sessionId !== "string" || !sessionId) {
+      return { status: "error", message: "session-hud:show-session-menu requires a sessionId string" };
+    }
+    return showSessionHudMenu(event, sessionId);
+  });
   handle("session-hud:open-session-folder", (_event, sessionId) => {
     if (typeof sessionId !== "string" || !sessionId) {
       return { status: "error", message: "session-hud:open-session-folder requires a sessionId string" };

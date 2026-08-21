@@ -113,7 +113,9 @@ if (ctx.claudeQuotaCollectionEnabled === false) {
 if (ctx.kimiQuotaCollectionEnabled === false) {
   clearLocalKimiQuota({ broadcast: false });
 }
-const MAX_SESSIONS = 20;
+// Keep enough state headroom for a 24-row HUD even when a few recovered,
+// headless, or recently completed sessions coexist with the visible set.
+const MAX_SESSIONS = 32;
 const ASSISTANT_OUTPUT_MAX = 2400;
 const CODEX_EXIT_PROBE_DELAYS_MS = [1000, 3000, 8000, 15000];
 // PostCompact intentionally excluded (#406): compaction finishing is not a turn

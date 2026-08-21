@@ -824,6 +824,7 @@ function makeGeneralSnapshot(overrides = {}) {
     holidayAccessoryEnabled: {},
     size: 50,
     sessionHudEnabled: true,
+    sessionHudMaxRows: 24,
     sessionHudShowStateLabels: true,
     sessionHudShowElapsed: true,
     sessionHudShowContextUsage: true,
@@ -8765,6 +8766,9 @@ describe("settings renderer browser environment", () => {
     assert.ok(generalSource.includes('state.transientUiState.generalSwitches.set("soundMuted"'));
     assert.ok(generalSource.includes("if (!result || result.status !== \"ok\" || result.noop)"));
     assert.ok(generalSource.includes("sessionHudSummaryLabels"));
+    assert.ok(generalSource.includes("sessionHudSummaryMaxRows"));
+    assert.ok(generalSource.includes('key: "sessionHudMaxRows"'));
+    assert.ok(generalSource.includes('key: "sessionHudShowIdle"'));
     assert.ok(generalSource.includes('key: "sessionHudShowStateLabels"'));
     assert.ok(generalSource.includes("session-hud-summary-control"));
     assert.ok(/\.settings-option-list\s*\{[\s\S]*display:\s*grid;[\s\S]*gap:\s*8px;/.test(css));
@@ -8783,6 +8787,15 @@ describe("settings renderer browser environment", () => {
     assert.ok(/@media \(max-width:\s*720px\)\s*\{[\s\S]*\.session-hud-summary-control\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[\s\S]*width:\s*min\(238px,\s*100%\);/.test(css));
     assert.ok(/@media \(max-width:\s*720px\)\s*\{[\s\S]*\.session-hud-summary-control\s*\{[\s\S]*justify-self:\s*start;/.test(css));
     assert.ok(/function buildFlashGroup\(\)[\s\S]*id:\s*"general:flash",[\s\S]*animateExpansion:\s*false,/.test(generalSource));
+    for (const key of [
+      "sessionHudSummaryMaxRows",
+      "rowSessionHudMaxRows",
+      "rowSessionHudMaxRowsDesc",
+    ]) {
+      const matches = i18nSource.match(new RegExp(`\\b${key}:`, "g"));
+      assert.strictEqual(matches ? matches.length : 0, SUPPORTED_LANGS.length,
+        `${key} should exist in every supported language`);
+    }
     assert.ok(/\.collapsible-group-text \.row-label\s*\{[\s\S]*text-overflow:\s*ellipsis;[\s\S]*white-space:\s*nowrap;/.test(css));
     assert.ok(/\.collapsible-group-text \.row-desc\s*\{[\s\S]*white-space:\s*normal;[\s\S]*-webkit-line-clamp:\s*2;/.test(css));
     assert.ok(/\.sound-summary-control\s*\{[\s\S]*display:\s*inline-flex;/.test(css));
@@ -9234,6 +9247,8 @@ describe("settings renderer browser environment", () => {
       lang: "en",
       size: 50,
       sessionHudEnabled: false,
+      sessionHudMaxRows: 24,
+      sessionHudShowIdle: false,
       sessionHudShowStateLabels: true,
       sessionHudShowElapsed: true,
       sessionHudShowContextUsage: true,
@@ -9264,23 +9279,32 @@ describe("settings renderer browser environment", () => {
     harness.renderContent();
 
     const master = harness.getSwitch("sessionHudEnabled");
+    const idle = harness.getSwitch("sessionHudShowIdle");
     const labels = harness.getSwitch("sessionHudShowStateLabels");
     const elapsed = harness.getSwitch("sessionHudShowElapsed");
     const contextUsage = harness.getSwitch("sessionHudShowContextUsage");
     const cleanup = harness.getSwitch("sessionHudCleanupDetached");
+    const maxRows = harness.core.state.mountedControls.sessionCleanupControls.get("sessionHudMaxRows");
     const summary = harness.core.state.mountedControls.sessionHudSummary.element;
     const optionList = harness.content.querySelector(".session-hud-option-list");
     assert.ok(master);
+    assert.ok(idle);
     assert.ok(labels);
     assert.ok(elapsed);
     assert.ok(contextUsage);
     assert.ok(cleanup);
+    assert.ok(maxRows);
+    assert.strictEqual(maxRows.input.value, "24");
+    assert.strictEqual(maxRows.input.disabled, true);
     assert.ok(optionList);
     assert.ok(optionList.children.every((child) => child.classList.contains("settings-option-item")));
     assert.strictEqual(harness.getSwitchMeta("sessionHudEnabled").row.querySelector(".row-desc"), null);
     assert.strictEqual(summary.children.length, 1);
     assert.strictEqual(summary.children[0].textContent, "HUD: off");
     assert.strictEqual(summary.classList.contains("compact"), true);
+    assert.strictEqual(idle.classList.contains("disabled"), true);
+    assert.strictEqual(idle.attributes["aria-disabled"], "true");
+    assert.strictEqual(idle.tabIndex, -1);
     assert.strictEqual(labels.classList.contains("disabled"), true);
     assert.strictEqual(labels.attributes["aria-disabled"], "true");
     assert.strictEqual(labels.tabIndex, -1);
@@ -9303,12 +9327,16 @@ describe("settings renderer browser environment", () => {
       "Session HUD master broadcasts should patch mounted controls instead of rebuilding General"
     );
     assert.strictEqual(harness.getSwitch("sessionHudEnabled"), master);
+    assert.strictEqual(harness.getSwitch("sessionHudShowIdle"), idle);
     assert.strictEqual(harness.getSwitch("sessionHudShowStateLabels"), labels);
     assert.strictEqual(harness.getSwitch("sessionHudShowElapsed"), elapsed);
     assert.strictEqual(harness.getSwitch("sessionHudShowContextUsage"), contextUsage);
     assert.strictEqual(harness.getSwitch("sessionHudCleanupDetached"), cleanup);
     assert.strictEqual(master.classList.contains("on"), true);
     assert.strictEqual(master.classList.contains("pending"), false);
+    assert.strictEqual(idle.classList.contains("disabled"), false);
+    assert.strictEqual(idle.attributes["aria-disabled"], undefined);
+    assert.strictEqual(idle.tabIndex, 0);
     assert.strictEqual(labels.classList.contains("disabled"), false);
     assert.strictEqual(labels.attributes["aria-disabled"], undefined);
     assert.strictEqual(labels.tabIndex, 0);
@@ -9320,12 +9348,24 @@ describe("settings renderer browser environment", () => {
     assert.strictEqual(contextUsage.tabIndex, 0);
     assert.strictEqual(cleanup.classList.contains("disabled"), false);
     assert.strictEqual(cleanup.tabIndex, 0);
-    assert.strictEqual(summary.children.length, 4);
+    assert.strictEqual(maxRows.input.disabled, false);
+    assert.strictEqual(summary.children.length, 6);
     assert.strictEqual(summary.classList.contains("compact"), false);
-    assert.strictEqual(summary.children[0].textContent, "Labels: on");
-    assert.strictEqual(summary.children[1].textContent, "Time: on");
-    assert.strictEqual(summary.children[2].textContent, "Context: on");
-    assert.strictEqual(summary.children[3].textContent, "Auto-clear: on");
+    assert.strictEqual(summary.children[0].textContent, "Rows: 24");
+    assert.strictEqual(summary.children[1].textContent, "Idle: off");
+    assert.strictEqual(summary.children[2].textContent, "Labels: on");
+    assert.strictEqual(summary.children[3].textContent, "Time: on");
+    assert.strictEqual(summary.children[4].textContent, "Context: on");
+    assert.strictEqual(summary.children[5].textContent, "Auto-clear: on");
+
+    const beforeRowsRenderCount = harness.getContentRenderCount();
+    harness.core.ops.applyChanges({
+      changes: { sessionHudMaxRows: 18 },
+      snapshot: { ...initialSnapshot, sessionHudEnabled: true, sessionHudMaxRows: 18 },
+    });
+    assert.strictEqual(harness.getContentRenderCount(), beforeRowsRenderCount);
+    assert.strictEqual(maxRows.input.value, "18");
+    assert.strictEqual(summary.children[0].textContent, "Rows: 18");
 
     assert.ok(
       elapsed.eventListeners.click && elapsed.eventListeners.click.length > 0,
@@ -9893,6 +9933,7 @@ describe("settings renderer browser environment", () => {
       lang: "en",
       size: 50,
       sessionHudEnabled: true,
+      sessionHudMaxRows: 24,
       sessionHudShowStateLabels: true,
       sessionHudShowElapsed: true,
       sessionHudCleanupDetached: true,
