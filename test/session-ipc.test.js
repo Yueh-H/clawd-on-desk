@@ -139,6 +139,7 @@ test("session IPC registers owned channels and disposes them", () => {
     "dashboard:refresh-kimi-quota",
     "dashboard:set-session-alias",
     "dashboard:set-session-automation",
+    "session-hud:delete-session",
     "session-hud:get-i18n",
     "session-hud:open-session-folder",
     "session-hud:show-session-menu",
@@ -185,6 +186,10 @@ test("session IPC delegates dashboard and HUD behavior", async () => {
     await ipcMain.invoke("session-hud:show-session-menu", "hud-menu-session"),
     { status: "ok" }
   );
+  assert.deepStrictEqual(await ipcMain.invoke("session-hud:delete-session", "hud-delete-session"), {
+    status: "ok",
+    hidden: "hud-delete-session",
+  });
   assert.deepStrictEqual(
     await ipcMain.invoke("dashboard:set-session-alias", { sessionId: "s1", alias: "Frontend" }),
     { status: "ok", alias: "Frontend" }
@@ -205,6 +210,7 @@ test("session IPC delegates dashboard and HUD behavior", async () => {
     ["setSessionHudPinned", false],
     ["hideSession", "hidden-session"],
     ["showSessionHudMenu", "hud-menu-session", "sender-web-contents"],
+    ["hideSession", "hud-delete-session"],
     ["setSessionAlias", { sessionId: "s1", alias: "Frontend" }],
     ["openSessionFolder", "folder-session"],
     ["openSessionFolder", "hud-folder-session"],
@@ -226,6 +232,15 @@ test("HUD context-menu IPC accepts only a sessionId string", async () => {
   const { ipcMain, calls } = createHarness();
   for (const bad of [null, undefined, "", 42, { sessionId: "s1" }]) {
     const result = await ipcMain.invoke("session-hud:show-session-menu", bad);
+    assert.strictEqual(result.status, "error");
+  }
+  assert.deepStrictEqual(calls, []);
+});
+
+test("HUD delete IPC accepts only a sessionId string", async () => {
+  const { ipcMain, calls } = createHarness();
+  for (const bad of [null, undefined, "", 42, { sessionId: "s1" }]) {
+    const result = await ipcMain.invoke("session-hud:delete-session", bad);
     assert.strictEqual(result.status, "error");
   }
   assert.deepStrictEqual(calls, []);

@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("sessionHudAPI", {
   getI18n: () => ipcRenderer.invoke("session-hud:get-i18n"),
   focusSession: (sessionId) => ipcRenderer.send("session-hud:focus-session", sessionId),
   showSessionMenu: (sessionId) => ipcRenderer.invoke("session-hud:show-session-menu", sessionId),
+  deleteSession: (sessionId) => ipcRenderer.invoke("session-hud:delete-session", sessionId),
   openSessionFolder: (sessionId) => ipcRenderer.invoke("session-hud:open-session-folder", sessionId),
   openDashboard: () => ipcRenderer.send("session-hud:open-dashboard"),
   setPinned: (value) => ipcRenderer.send("session-hud:set-pinned", !!value),

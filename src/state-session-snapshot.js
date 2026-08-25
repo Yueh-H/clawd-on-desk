@@ -302,6 +302,7 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
   const rawEvent = latestEvent && latestEvent.event ? latestEvent.event : null;
   const eventAt = Number(latestEvent && latestEvent.at);
   const badge = deriveSessionBadge(session);
+  const manualRetained = !!(session && session.manualRetained === true);
   const getAgentIconUrl = typeof options.getAgentIconUrl === "function"
     ? options.getAgentIconUrl
     : () => null;
@@ -310,12 +311,16 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
     : () => "";
   const agentId = (session && session.agentId) || null;
   const state = (session && session.state) || "idle";
-  const hiddenFromHud = shouldAutoClearDetachedSession(session, badge, options)
-    || isSupersededLocalCodexProcessSession(id, session, options.latestLocalCodexProcessIds);
+  const hiddenFromHud = options.manualSessionRetention === true
+    ? false
+    : (
+        shouldAutoClearDetachedSession(session, badge, options)
+        || isSupersededLocalCodexProcessSession(id, session, options.latestLocalCodexProcessIds)
+      );
   const startupRecovered = !!(session && session.startupRecovered === true);
   // Recovery leases are admitted only after their process identity is verified,
   // so their preserved sourcePid remains a valid focus fallback after restart.
-  const focusTarget = session && !session.headless && state !== "sleeping" && !hiddenFromHud
+  const focusTarget = session && !manualRetained && !session.headless && state !== "sleeping" && !hiddenFromHud
     ? getSessionFocusTarget({ ...(session || {}), id }, {
       osPlatform: options.focusHostPlatform || options.osPlatform,
     })
@@ -324,7 +329,8 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
   const automationRecord = options.sessionAutomationRecord || null;
   const automationIdentity = session && session.sessionAutomationIdentity;
   const canConfigureSessionAutomation = !!(
-    automationIdentity
+    !manualRetained
+    && automationIdentity
     && automationIdentity.eligible === true
     && agentId
   );
@@ -340,6 +346,7 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
     agentName: resolveAgentDisplayName(agentId),
     iconUrl: getAgentIconUrl(agentId),
     state,
+    manualRetained,
     startupRecovered,
     badge,
     hiddenFromHud,
@@ -436,9 +443,12 @@ function buildSessionSnapshot(sessions, options = {}) {
   ]));
   const matchedAutomationGrantIds = new Set();
   for (const [id, session] of normalizeSessionsIterable(sessions)) {
-    const automationRecord = automationByIdentity.get(
-      `${session && session.agentId ? session.agentId : ""}\u0000${id}`
-    ) || null;
+    const manualRetained = !!(session && session.manualRetained === true);
+    const automationRecord = manualRetained
+      ? null
+      : (automationByIdentity.get(
+          `${session && session.agentId ? session.agentId : ""}\u0000${id}`
+        ) || null);
     if (automationRecord) matchedAutomationGrantIds.add(automationRecord.grantId);
     entries.push(buildSessionSnapshotEntry(id, session, sessionAliases, {
       ...options,
@@ -452,7 +462,9 @@ function buildSessionSnapshot(sessions, options = {}) {
   const orderedIds = dashboardEntries.map((entry) => entry.id);
   const menuOrderedIds = menuEntries.map((entry) => entry.id);
   const hudEntries = dashboardEntries.filter((entry) =>
-    !entry.headless && entry.state !== "sleeping" && !entry.hiddenFromHud
+    !entry.headless
+    && (options.manualSessionRetention === true || entry.state !== "sleeping")
+    && !entry.hiddenFromHud
   );
 
   const groupMap = new Map();
@@ -575,6 +587,7 @@ function sessionSnapshotSignature(snapshot) {
       profileId: entry.profileId,
       rawSessionId: entry.rawSessionId,
       state: entry.state,
+      manualRetained: !!entry.manualRetained,
       startupRecovered: !!entry.startupRecovered,
       badge: entry.badge,
       hasAlias: entry.hasAlias,

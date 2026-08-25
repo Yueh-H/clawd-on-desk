@@ -10,12 +10,13 @@ const RECENT_DONE_UNREAD_MS = 60 * 1000;
 const SESSION_ACTION_FEEDBACK_MS = 4000;
 const ACTIONABLE_IDLE_EVENTS = new Set(["PermissionRequest", "Elicitation", "Notification"]);
 
-let snapshot = { sessions: [], orderedIds: [], hudTotalNonIdle: 0, hudLastTitle: null, hudMaxRows: HUD_DEFAULT_MAX_ROWS, hudShowIdle: false, hudShowStateLabels: true, hudShowElapsed: true, hudShowContextUsage: true, hudShowQuota: true, hudPinned: false, accountQuota: [] };
+let snapshot = { sessions: [], orderedIds: [], hudTotalNonIdle: 0, hudLastTitle: null, hudMaxRows: HUD_DEFAULT_MAX_ROWS, hudShowIdle: false, hudManualRetention: false, hudShowStateLabels: true, hudShowElapsed: true, hudShowContextUsage: true, hudShowQuota: true, hudPinned: false, accountQuota: [] };
 let i18nPayload = { lang: "en", translations: {} };
 
 const unreadSessions = new Set();
 const prevBadges = new Map();
 const pendingFolderSessions = new Set();
+const pendingDeleteSessions = new Set();
 let sessionActionFeedback = null;
 let sessionActionFeedbackTimer = null;
 
@@ -422,6 +423,36 @@ function createRowForSession(session, now) {
     hasRightContent = true;
   }
 
+  if (snapshot.hudManualRetention === true) {
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "remove-session-button";
+    removeButton.textContent = "\u00d7";
+    removeButton.title = t("sessionHudDeleteSession");
+    removeButton.setAttribute("aria-label", t("sessionHudDeleteSession"));
+    removeButton.disabled = pendingDeleteSessions.has(session.id);
+    removeButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (pendingDeleteSessions.has(session.id)) return;
+      pendingDeleteSessions.add(session.id);
+      removeButton.disabled = true;
+      try {
+        const result = await window.sessionHudAPI.deleteSession(session.id);
+        if (!result || result.status !== "ok") {
+          pendingDeleteSessions.delete(session.id);
+          showSessionFeedback(session.id, t("sessionHudDeleteFailed"));
+        }
+      } catch (err) {
+        pendingDeleteSessions.delete(session.id);
+        showSessionFeedback(session.id, t("sessionHudDeleteFailed"));
+        console.warn("delete session threw:", err);
+      }
+    });
+    right.appendChild(removeButton);
+    hasRightContent = true;
+  }
+
   row.appendChild(left);
   if (hasRightContent) row.appendChild(right);
 
@@ -519,6 +550,9 @@ function render() {
   const currentIds = new Set(sessions.map((session) => session.id));
   for (const sessionId of pendingFolderSessions) {
     if (!currentIds.has(sessionId)) pendingFolderSessions.delete(sessionId);
+  }
+  for (const sessionId of pendingDeleteSessions) {
+    if (!currentIds.has(sessionId)) pendingDeleteSessions.delete(sessionId);
   }
   if (sessionActionFeedback && !currentIds.has(sessionActionFeedback.sessionId)) {
     if (sessionActionFeedbackTimer) clearTimeout(sessionActionFeedbackTimer);

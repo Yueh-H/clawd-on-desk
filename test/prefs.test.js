@@ -75,6 +75,7 @@ describe("prefs.getDefaults", () => {
     assert.strictEqual(d.sessionHudEnabled, true);
     assert.strictEqual(d.sessionHudMaxRows, 24);
     assert.strictEqual(d.sessionHudShowIdle, false);
+    assert.strictEqual(d.sessionHudManualRetention, false);
     assert.strictEqual(d.sessionHudShowStateLabels, true);
     assert.strictEqual(d.sessionHudShowElapsed, false);
     assert.strictEqual(d.sessionHudShowContextUsage, true);

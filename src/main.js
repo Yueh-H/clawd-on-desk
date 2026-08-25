@@ -1119,6 +1119,7 @@ let bubbleFollowPet = _settingsController.get("bubbleFollowPet");
 let sessionHudEnabled = _settingsController.get("sessionHudEnabled");
 let sessionHudMaxRows = _settingsController.get("sessionHudMaxRows");
 let sessionHudShowIdle = _settingsController.get("sessionHudShowIdle");
+let sessionHudManualRetention = _settingsController.get("sessionHudManualRetention");
 let sessionHudShowStateLabels = _settingsController.get("sessionHudShowStateLabels");
 let sessionHudShowElapsed = _settingsController.get("sessionHudShowElapsed");
 let sessionHudShowContextUsage = _settingsController.get("sessionHudShowContextUsage");
@@ -1867,6 +1868,9 @@ const _stateCtx = {
   get hitWin() { return hitWin; },
   // Last-known account quota survives app restarts (state-account-quota.js).
   accountQuotaPersistPath: require("./state-account-quota").DEFAULT_PERSIST_PATH,
+  // Manual-retention cards deliberately live outside prefs: this file can grow
+  // with user-owned history and contains only sanitized display metadata.
+  manualSessionRetentionPersistPath: require("./manual-session-retention").DEFAULT_PERSIST_PATH,
   get claudeQuotaCollectionEnabled() { return claudeQuotaCollectionEnabled; },
   get kimiQuotaCollectionEnabled() { return kimiQuotaCollectionEnabled; },
   get quotaMergeSources() { return quotaMergeSources; },
@@ -1943,6 +1947,7 @@ const _stateCtx = {
     return !!(entry && entry.disabled === true);
   },
   get sessionHudCleanupDetached() { return sessionHudCleanupDetached; },
+  get sessionHudManualRetention() { return sessionHudManualRetention; },
   getStaleConfig: () => ({
     sessionStaleMs,
     workingStaleMs,
@@ -2406,6 +2411,7 @@ const _sessionHud = require("./session-hud")({
   get sessionHudEnabled() { return sessionHudEnabled; },
   get sessionHudMaxRows() { return sessionHudMaxRows; },
   get sessionHudShowIdle() { return sessionHudShowIdle; },
+  get sessionHudManualRetention() { return sessionHudManualRetention; },
   get sessionHudShowStateLabels() { return sessionHudShowStateLabels; },
   get sessionHudShowElapsed() { return sessionHudShowElapsed; },
   get sessionHudShowContextUsage() { return sessionHudShowContextUsage; },
@@ -3863,6 +3869,7 @@ const SETTINGS_MIRROR_SETTERS = {
   bubbleFollowPet: (v) => { bubbleFollowPet = v; }, sessionHudEnabled: (v) => { sessionHudEnabled = v; },
   sessionHudMaxRows: (v) => { sessionHudMaxRows = v; },
   sessionHudShowIdle: (v) => { sessionHudShowIdle = v; },
+  sessionHudManualRetention: (v) => { sessionHudManualRetention = v; },
   sessionHudShowStateLabels: (v) => { sessionHudShowStateLabels = v; },
   sessionHudShowElapsed: (v) => { sessionHudShowElapsed = v; },
   sessionHudShowContextUsage: (v) => { sessionHudShowContextUsage = v; },

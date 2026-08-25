@@ -18,6 +18,7 @@
     "sessionHudEnabled",
     "sessionHudMaxRows",
     "sessionHudShowIdle",
+    "sessionHudManualRetention",
     "sessionHudShowStateLabels",
     "sessionHudShowElapsed",
     "sessionHudShowContextUsage",
@@ -69,6 +70,7 @@
   };
   const SESSION_HUD_CHILD_SWITCH_KEYS = [
     "sessionHudShowIdle",
+    "sessionHudManualRetention",
     "sessionHudShowStateLabels",
     "sessionHudShowElapsed",
     "sessionHudShowContextUsage",
@@ -78,6 +80,7 @@
     "sessionHudEnabled",
     "sessionHudMaxRows",
     "sessionHudShowIdle",
+    "sessionHudManualRetention",
     "sessionHudShowStateLabels",
     "sessionHudShowElapsed",
     "sessionHudShowContextUsage",
@@ -951,6 +954,12 @@
         disabled: !sessionHudControlsEnabled,
       }),
       helpers.buildSwitchRow({
+        key: "sessionHudManualRetention",
+        labelKey: "rowSessionHudManualRetention",
+        descKey: "rowSessionHudManualRetentionDesc",
+        disabled: !sessionHudControlsEnabled,
+      }),
+      helpers.buildSwitchRow({
         key: "sessionHudShowStateLabels",
         labelKey: "rowSessionHudStateLabels",
         descKey: "rowSessionHudStateLabelsDesc",
@@ -1009,6 +1018,13 @@
             snapshot.sessionHudShowIdle === true ? onLabel : offLabel
           ),
           accent: snapshot.sessionHudShowIdle === true,
+        });
+        items.push({
+          text: t("sessionHudSummaryManualRetention").replace(
+            "{state}",
+            snapshot.sessionHudManualRetention === true ? onLabel : offLabel
+          ),
+          accent: snapshot.sessionHudManualRetention === true,
         });
         items.push({
           text: t("sessionHudSummaryLabels").replace(

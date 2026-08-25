@@ -694,6 +694,14 @@ describe("session HUD v5 three-state runtime contracts (source-level)", () => {
       "session-hud must not send hudAutoHide in snapshot");
   });
 
+  it("manual retention forces idle rows visible and marks the renderer snapshot", () => {
+    assert.match(
+      src,
+      /return ctx\.sessionHudManualRetention === true \|\| ctx\.sessionHudShowIdle !== false/
+    );
+    assert.match(src, /hudManualRetention:\s*ctx\.sessionHudManualRetention === true/);
+  });
+
   it("sends only the supported quota display modes to the ring renderer", () => {
     assert.match(
       src,

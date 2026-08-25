@@ -111,6 +111,36 @@ describe("startup-recovered session snapshots", () => {
   });
 });
 
+describe("manual-retained session snapshots", () => {
+  it("keeps historical rows visible but strips focus and automation affordances", () => {
+    const snapshot = buildSessionSnapshot(new Map([
+      ["history", session("idle", {
+        manualRetained: true,
+        sourcePid: 4242,
+        sessionAutomationIdentity: { eligible: true, reason: "eligible" },
+      })],
+    ]), {
+      statePriority: STATE_PRIORITY,
+      manualSessionRetention: true,
+      sessionHudCleanupDetached: true,
+      sessionAutomationRecords: [{
+        agentId: "claude-code",
+        sessionId: "history",
+        grantId: "grant-1",
+        mode: "auto-tools",
+      }],
+    });
+    const entry = snapshot.sessions[0];
+    assert.strictEqual(entry.manualRetained, true);
+    assert.strictEqual(entry.hiddenFromHud, false);
+    assert.strictEqual(entry.canFocus, false);
+    assert.strictEqual(entry.focusTarget, null);
+    assert.strictEqual(entry.sessionAutomationMode, null);
+    assert.strictEqual(entry.sessionAutomationGrantId, null);
+    assert.strictEqual(entry.canConfigureSessionAutomation, false);
+  });
+});
+
 describe("remote profile action ids", () => {
   it("keeps canonical ids for actions while rendering raw ids and profile-scoped aliases", () => {
     const rawSessionId = "same-visible-id";

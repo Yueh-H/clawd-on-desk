@@ -131,6 +131,12 @@ function registerSessionIpc(options = {}) {
     }
     return showSessionHudMenu(event, sessionId);
   });
+  handle("session-hud:delete-session", (_event, sessionId) => {
+    if (typeof sessionId !== "string" || !sessionId) {
+      return { status: "error", message: "session-hud:delete-session requires a sessionId string" };
+    }
+    return hideSession(sessionId);
+  });
   handle("session-hud:open-session-folder", (_event, sessionId) => {
     if (typeof sessionId !== "string" || !sessionId) {
       return { status: "error", message: "session-hud:open-session-folder requires a sessionId string" };

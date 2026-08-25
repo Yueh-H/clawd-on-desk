@@ -38,6 +38,7 @@ const { getAgentIconUrl } = require("./state-agent-icons");
 const { resolveSessionIdentity } = require("./session-key");
 const { normalizeTranscriptPath } = require("./transcript-path");
 const { createAccountQuotaStore } = require("./state-account-quota");
+const { createManualSessionRetentionStore } = require("./manual-session-retention");
 const { normalizeQuotaGroup } = require("../hooks/quota-bucket");
 const { ANTIGRAVITY_QUOTA_FIELDS } = require("../hooks/antigravity-context-usage");
 const { CLAUDE_QUOTA_FIELDS } = require("../hooks/claude-rate-limits");
@@ -102,6 +103,10 @@ const sessions = new Map();
 // filesystem-free; main.js passes the real path.
 const accountQuota = createAccountQuotaStore({
   persistPath: ctx.accountQuotaPersistPath || null,
+  logWarn: console.warn,
+});
+const manualSessionRetention = createManualSessionRetentionStore({
+  persistPath: ctx.manualSessionRetentionPersistPath || null,
   logWarn: console.warn,
 });
 // Upgrade cleanup: older builds retained the last local Claude quota even
@@ -1037,13 +1042,34 @@ function getSessionAliases() {
     : {};
 }
 
+function isManualSessionRetentionEnabled() {
+  return ctx.sessionHudManualRetention === true;
+}
+
+function retainSessionIfEnabled(id, session) {
+  if (!isManualSessionRetentionEnabled()) return false;
+  return manualSessionRetention.upsertSession(id, session);
+}
+
+function sessionsForSnapshot() {
+  if (!isManualSessionRetentionEnabled()) return sessions;
+  manualSessionRetention.upsertSessions(sessions);
+  const merged = manualSessionRetention.historicalSessions();
+  for (const [id, session] of sessions) merged.set(id, session);
+  return merged;
+}
+
 function buildSessionSnapshot() {
-  return buildSessionSnapshotFromSessions(sessions, {
+  const manualRetentionEnabled = isManualSessionRetentionEnabled();
+  return buildSessionSnapshotFromSessions(sessionsForSnapshot(), {
     sessionAliases: getSessionAliases(),
     getAgentIconUrl,
     resolveAgentDisplayName: ctx.resolveAgentDisplayName,
     statePriority: STATE_PRIORITY,
-    sessionHudCleanupDetached: ctx.sessionHudCleanupDetached === true,
+    sessionHudCleanupDetached: manualRetentionEnabled
+      ? false
+      : ctx.sessionHudCleanupDetached === true,
+    manualSessionRetention: manualRetentionEnabled,
     focusHostPlatform: ctx.focusHostPlatform || process.platform,
     isProcessAlive,
     accountQuota: accountQuota.snapshot({ mergeSources: ctx.quotaMergeSources === true }),
@@ -1157,7 +1183,10 @@ function evictOldestSessionIfNeeded(sessionId) {
     }
   }
 
-  if (oldestId) sessions.delete(oldestId);
+  if (oldestId) {
+    retainSessionIfEnabled(oldestId, sessions.get(oldestId));
+    sessions.delete(oldestId);
+  }
 }
 
 // Sets / clears `requiresCompletionAck` based on the current event.
@@ -2165,6 +2194,13 @@ function updateSession(sessionId, state, event, opts = {}) {
         reason: "session-end",
       });
     }
+    retainSessionIfEnabled(sessionId, {
+      ...(endingSession || {}),
+      ...base,
+      state: "idle",
+      updatedAt: Date.now(),
+      displayHint: null,
+    });
     sessions.delete(sessionId);
     debugSession(`session-end delete ${describeSession(sessionId, endingSession)}`);
     cleanStaleSessions();
@@ -2521,6 +2557,7 @@ function cleanStaleSessions() {
           reason: `stale-delete-${decision.reason}`,
         });
       }
+      retainSessionIfEnabled(id, s);
       sessions.delete(id); changed = true;
       continue;
     }
@@ -2571,10 +2608,13 @@ function dismissSession(sessionId) {
   const id = typeof sessionId === "string" ? sessionId : "";
   if (!id) return false;
   const session = sessions.get(id);
-  if (!session) return false;
-  if (session.agentId === "codex") cancelCodexExitProbe(id, "session-hidden");
-  sessions.delete(id);
-  if (session.agentId === "kimi-cli") disposeKimiSessionState(id, "kimi-session-hidden");
+  const removedRetained = manualSessionRetention.remove(id);
+  if (!session && !removedRetained) return false;
+  if (session) {
+    if (session.agentId === "codex") cancelCodexExitProbe(id, "session-hidden");
+    sessions.delete(id);
+    if (session.agentId === "kimi-cli") disposeKimiSessionState(id, "kimi-session-hidden");
+  }
   const resolved = resolveDisplayState();
   setState(resolved, getSvgOverride(resolved));
   emitSessionSnapshot({ force: true });
@@ -3049,6 +3089,7 @@ function cleanup() {
   // final debounce window before quit would otherwise never reach disk
   // (main.js before-quit calls this cleanup).
   accountQuota.flush();
+  manualSessionRetention.flush();
   if (pendingTimer) clearTimeout(pendingTimer);
   pendingState = null;
   if (autoReturnTimer) clearTimeout(autoReturnTimer);

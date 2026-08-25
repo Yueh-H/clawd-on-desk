@@ -383,6 +383,7 @@ const updateRegistry = {
   sessionHudEnabled: requireBoolean("sessionHudEnabled"),
   sessionHudMaxRows: requireIntegerInRange("sessionHudMaxRows", 1, 24),
   sessionHudShowIdle: requireBoolean("sessionHudShowIdle"),
+  sessionHudManualRetention: requireBoolean("sessionHudManualRetention"),
   sessionHudShowStateLabels: requireBoolean("sessionHudShowStateLabels"),
   sessionHudShowElapsed: requireBoolean("sessionHudShowElapsed"),
   sessionHudShowContextUsage: requireBoolean("sessionHudShowContextUsage"),

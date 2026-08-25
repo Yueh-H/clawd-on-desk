@@ -102,6 +102,7 @@ function translations() {
     sessionHudElapsedSec: "{n}s",
     sessionHudDoubleClickToFocus: "Double-click to open this session",
     sessionHudDeleteSession: "Remove from Clawd",
+    sessionHudDeleteFailed: "Could not remove this session.",
     sessionMinAgo: "{n}m",
     sessionHrAgo: "{n}h",
     sessionBadgeIdle: "Idle",
@@ -221,6 +222,7 @@ async function loadHud(sessions, openResult = { status: "ok" }, snapshotOverride
   const focusCalls = [];
   const ackCalls = [];
   const sessionMenuCalls = [];
+  const deleteCalls = [];
   let snapshotListener = null;
   let feedbackTimeout = null;
   const api = {
@@ -234,6 +236,10 @@ async function loadHud(sessions, openResult = { status: "ok" }, snapshotOverride
     focusSession: (...args) => { focusCalls.push(args); },
     showSessionMenu: async (...args) => {
       sessionMenuCalls.push(args);
+      return { status: "ok" };
+    },
+    deleteSession: async (...args) => {
+      deleteCalls.push(args);
       return { status: "ok" };
     },
     ackCompletion: async (...args) => {
@@ -259,10 +265,12 @@ async function loadHud(sessions, openResult = { status: "ok" }, snapshotOverride
     focusCalls,
     ackCalls,
     sessionMenuCalls,
-    pushSnapshot: (nextSessions = sessions) => snapshotListener({
+    deleteCalls,
+    pushSnapshot: (nextSessions = sessions, nextSnapshotOverrides = {}) => snapshotListener({
       sessions: nextSessions,
       orderedIds: nextSessions.map((entry) => entry.id),
       ...snapshotOverrides,
+      ...nextSnapshotOverrides,
     }),
     expireFeedback: async () => {
       const callback = feedbackTimeout;
@@ -541,6 +549,22 @@ test("HUD hides ordinary idle rows but keeps sessions waiting for input", async 
   );
 });
 
+test("HUD manual retention shows a visible remove control that deletes only that session id", async () => {
+  const harness = await loadHud([session("kept")], undefined, {
+    hudShowIdle: true,
+    hudManualRetention: true,
+  });
+  const remove = byClass(harness.root, "remove-session-button");
+  assert.strictEqual(remove.length, 1);
+  assert.strictEqual(remove[0].title, "Remove from Clawd");
+  await remove[0].dispatch("click");
+  assert.deepStrictEqual(harness.deleteCalls, [["kept"]]);
+  assert.deepStrictEqual(harness.focusCalls, []);
+
+  harness.pushSnapshot([session("ordinary")], { hudManualRetention: false });
+  assert.strictEqual(byClass(harness.root, "remove-session-button").length, 0);
+});
+
 test("HUD folder click sends only id and exposes open failure", async () => {
   const { root, openCalls } = await loadHud([session("local")], { status: "not-available" });
   await byClass(root, "open-folder-button")[0].dispatch("click");
@@ -586,6 +610,7 @@ test("HUD interaction and folder feedback copy exists in all supported languages
     "dashboardOpenFolder",
     "sessionHudDoubleClickToFocus",
     "sessionHudDeleteSession",
+    "sessionHudDeleteFailed",
     "sessionOpenFolderFailed",
     "sessionOpenFolderUnavailable",
     "sessionFocusUnavailableRemote",

@@ -335,6 +335,40 @@ body { padding: 2px 3px 8px; }
 
 .open-folder-button:disabled { opacity: 0.55; }
 
+.remove-session-button {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 16px;
+  opacity: 0.58;
+}
+
+.remove-session-button:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  opacity: 1;
+}
+
+.remove-session-button:disabled {
+  cursor: wait;
+  opacity: 0.3;
+}
+
+@media (prefers-color-scheme: dark) {
+  .remove-session-button:hover {
+    background: rgba(239, 68, 68, 0.18);
+    color: #f87171;
+  }
+}
+
 @keyframes bell-ring {
   0%   { transform: rotate(0deg); }
   10%  { transform: rotate(12deg); }

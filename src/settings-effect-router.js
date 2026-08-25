@@ -283,6 +283,7 @@ function createSettingsEffectRouter(options = {}) {
       "sessionHudEnabled" in changes
       || "sessionHudMaxRows" in changes
       || "sessionHudShowIdle" in changes
+      || "sessionHudManualRetention" in changes
       || "sessionHudShowStateLabels" in changes
       || "sessionHudShowElapsed" in changes
       || "sessionHudShowContextUsage" in changes
@@ -299,6 +300,16 @@ function createSettingsEffectRouter(options = {}) {
         repositionFloatingBubbles();
       } catch (err) {
         warn(logWarn, "Clawd: session HUD setting sync failed:", err);
+      }
+    }
+    if ("sessionHudManualRetention" in changes) {
+      try {
+        // Enabling the mode must immediately seed the persistence store from
+        // every live session; disabling must immediately remove restored-only
+        // rows from the shared snapshot.
+        emitSessionSnapshot({ force: true });
+      } catch (err) {
+        warn(logWarn, "Clawd: manual session retention refresh failed:", err);
       }
     }
     if ("quotaMergeSources" in changes) {

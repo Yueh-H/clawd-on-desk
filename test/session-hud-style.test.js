@@ -196,6 +196,14 @@ describe("session HUD visual shell", () => {
     assert.match(sessionHudPreload, /session-hud:show-session-menu/);
   });
 
+  it("shows a direct remove button only for manual-retention snapshots", () => {
+    assert.match(sessionHudHtml, /\.remove-session-button\s*\{/);
+    assert.match(sessionHudRenderer, /snapshot\.hudManualRetention === true/);
+    assert.match(sessionHudRenderer, /removeButton\.className = "remove-session-button"/);
+    assert.match(sessionHudRenderer, /deleteSession\(session\.id\)/);
+    assert.match(sessionHudPreload, /session-hud:delete-session/);
+  });
+
   it("shows the resolved agent name in each compact row", () => {
     assert.match(sessionHudHtml, /\.agent-name\s*\{[\s\S]*max-width:\s*96px;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*\}/);
     assert.match(sessionHudRenderer, /function agentLabelFor\(session\)/);

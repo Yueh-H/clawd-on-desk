@@ -265,6 +265,15 @@ describe("settings-effect-router", () => {
     ]);
 
     calls.length = 0;
+    emit({ sessionHudManualRetention: true });
+    assert.deepStrictEqual(calls, [
+      ["updateMirrors", { sessionHudManualRetention: true }],
+      ["syncSessionHudVisibility"],
+      ["repositionFloatingBubbles"],
+      ["emitSessionSnapshot", { force: true }],
+    ]);
+
+    calls.length = 0;
     emit({ sessionHudShowStateLabels: false });
     assert.deepStrictEqual(calls, [
       ["updateMirrors", { sessionHudShowStateLabels: false }],

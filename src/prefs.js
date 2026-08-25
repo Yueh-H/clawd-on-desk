@@ -172,6 +172,9 @@ const SCHEMA = {
     validate: (v) => Number.isInteger(v) && v >= 1 && v <= 24,
   },
   sessionHudShowIdle: { type: "boolean", default: false },
+  // Opt-in archive semantics: session cards remain visible across lifecycle
+  // cleanup and Clawd restarts until the user explicitly removes them.
+  sessionHudManualRetention: { type: "boolean", default: false },
   sessionHudShowStateLabels: { type: "boolean", default: true },
   sessionHudShowElapsed: { type: "boolean", default: false },
   sessionHudShowContextUsage: { type: "boolean", default: true },

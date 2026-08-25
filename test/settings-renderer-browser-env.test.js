@@ -8769,6 +8769,7 @@ describe("settings renderer browser environment", () => {
     assert.ok(generalSource.includes("sessionHudSummaryMaxRows"));
     assert.ok(generalSource.includes('key: "sessionHudMaxRows"'));
     assert.ok(generalSource.includes('key: "sessionHudShowIdle"'));
+    assert.ok(generalSource.includes('key: "sessionHudManualRetention"'));
     assert.ok(generalSource.includes('key: "sessionHudShowStateLabels"'));
     assert.ok(generalSource.includes("session-hud-summary-control"));
     assert.ok(/\.settings-option-list\s*\{[\s\S]*display:\s*grid;[\s\S]*gap:\s*8px;/.test(css));
@@ -9249,6 +9250,7 @@ describe("settings renderer browser environment", () => {
       sessionHudEnabled: false,
       sessionHudMaxRows: 24,
       sessionHudShowIdle: false,
+      sessionHudManualRetention: false,
       sessionHudShowStateLabels: true,
       sessionHudShowElapsed: true,
       sessionHudShowContextUsage: true,
@@ -9280,6 +9282,7 @@ describe("settings renderer browser environment", () => {
 
     const master = harness.getSwitch("sessionHudEnabled");
     const idle = harness.getSwitch("sessionHudShowIdle");
+    const manualRetention = harness.getSwitch("sessionHudManualRetention");
     const labels = harness.getSwitch("sessionHudShowStateLabels");
     const elapsed = harness.getSwitch("sessionHudShowElapsed");
     const contextUsage = harness.getSwitch("sessionHudShowContextUsage");
@@ -9289,6 +9292,7 @@ describe("settings renderer browser environment", () => {
     const optionList = harness.content.querySelector(".session-hud-option-list");
     assert.ok(master);
     assert.ok(idle);
+    assert.ok(manualRetention);
     assert.ok(labels);
     assert.ok(elapsed);
     assert.ok(contextUsage);
@@ -9305,6 +9309,9 @@ describe("settings renderer browser environment", () => {
     assert.strictEqual(idle.classList.contains("disabled"), true);
     assert.strictEqual(idle.attributes["aria-disabled"], "true");
     assert.strictEqual(idle.tabIndex, -1);
+    assert.strictEqual(manualRetention.classList.contains("disabled"), true);
+    assert.strictEqual(manualRetention.attributes["aria-disabled"], "true");
+    assert.strictEqual(manualRetention.tabIndex, -1);
     assert.strictEqual(labels.classList.contains("disabled"), true);
     assert.strictEqual(labels.attributes["aria-disabled"], "true");
     assert.strictEqual(labels.tabIndex, -1);
@@ -9328,6 +9335,7 @@ describe("settings renderer browser environment", () => {
     );
     assert.strictEqual(harness.getSwitch("sessionHudEnabled"), master);
     assert.strictEqual(harness.getSwitch("sessionHudShowIdle"), idle);
+    assert.strictEqual(harness.getSwitch("sessionHudManualRetention"), manualRetention);
     assert.strictEqual(harness.getSwitch("sessionHudShowStateLabels"), labels);
     assert.strictEqual(harness.getSwitch("sessionHudShowElapsed"), elapsed);
     assert.strictEqual(harness.getSwitch("sessionHudShowContextUsage"), contextUsage);
@@ -9337,6 +9345,9 @@ describe("settings renderer browser environment", () => {
     assert.strictEqual(idle.classList.contains("disabled"), false);
     assert.strictEqual(idle.attributes["aria-disabled"], undefined);
     assert.strictEqual(idle.tabIndex, 0);
+    assert.strictEqual(manualRetention.classList.contains("disabled"), false);
+    assert.strictEqual(manualRetention.attributes["aria-disabled"], undefined);
+    assert.strictEqual(manualRetention.tabIndex, 0);
     assert.strictEqual(labels.classList.contains("disabled"), false);
     assert.strictEqual(labels.attributes["aria-disabled"], undefined);
     assert.strictEqual(labels.tabIndex, 0);
@@ -9349,14 +9360,15 @@ describe("settings renderer browser environment", () => {
     assert.strictEqual(cleanup.classList.contains("disabled"), false);
     assert.strictEqual(cleanup.tabIndex, 0);
     assert.strictEqual(maxRows.input.disabled, false);
-    assert.strictEqual(summary.children.length, 6);
+    assert.strictEqual(summary.children.length, 7);
     assert.strictEqual(summary.classList.contains("compact"), false);
     assert.strictEqual(summary.children[0].textContent, "Rows: 24");
     assert.strictEqual(summary.children[1].textContent, "Idle: off");
-    assert.strictEqual(summary.children[2].textContent, "Labels: on");
-    assert.strictEqual(summary.children[3].textContent, "Time: on");
-    assert.strictEqual(summary.children[4].textContent, "Context: on");
-    assert.strictEqual(summary.children[5].textContent, "Auto-clear: on");
+    assert.strictEqual(summary.children[2].textContent, "Keep: off");
+    assert.strictEqual(summary.children[3].textContent, "Labels: on");
+    assert.strictEqual(summary.children[4].textContent, "Time: on");
+    assert.strictEqual(summary.children[5].textContent, "Context: on");
+    assert.strictEqual(summary.children[6].textContent, "Auto-clear: on");
 
     const beforeRowsRenderCount = harness.getContentRenderCount();
     harness.core.ops.applyChanges({

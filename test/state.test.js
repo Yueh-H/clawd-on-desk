@@ -199,6 +199,72 @@ describe("remote profile session namespace", () => {
   });
 });
 
+describe("manual session retention", () => {
+  let api = null;
+  let tempDir = null;
+
+  afterEach(() => {
+    if (api) api.cleanup();
+    api = null;
+    if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
+    tempDir = null;
+  });
+
+  it("keeps ended cards across restart until the user removes them", () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "clawd-state-retention-"));
+    const persistPath = path.join(tempDir, "retained-sessions.json");
+    const retainedCtx = () => makeCtx({
+      sessionHudManualRetention: true,
+      manualSessionRetentionPersistPath: persistPath,
+    });
+
+    api = require("../src/state")(retainedCtx());
+    update(api, {
+      id: "kept-session",
+      agentId: "codex",
+      state: "working",
+      event: "PreToolUse",
+      sessionTitle: "Keep this card",
+      cwd: "/tmp/project",
+      sourcePid: 4242,
+      assistantLastOutput: "must not survive restart",
+      transcriptPath: "/private/transcript.jsonl",
+    });
+    api.buildSessionSnapshot();
+    update(api, {
+      id: "kept-session",
+      agentId: "codex",
+      state: "sleeping",
+      event: "SessionEnd",
+      sessionTitle: "Keep this card",
+      cwd: "/tmp/project",
+    });
+
+    assert.strictEqual(api.sessions.has("kept-session"), false, "live bookkeeping still ends");
+    let entry = api.buildSessionSnapshot().sessions.find((item) => item.id === "kept-session");
+    assert.ok(entry, "the retained card remains in the shared snapshot");
+    assert.strictEqual(entry.manualRetained, true);
+    assert.strictEqual(entry.state, "idle");
+    assert.strictEqual(entry.canFocus, false);
+    assert.strictEqual(entry.assistantLastOutput, null);
+    assert.strictEqual(entry.lastEvent, null);
+
+    api.cleanup();
+    api = require("../src/state")(retainedCtx());
+    entry = api.buildSessionSnapshot().sessions.find((item) => item.id === "kept-session");
+    assert.ok(entry, "the retained card returns after a Clawd restart");
+    assert.strictEqual(entry.sessionTitle, "Keep this card");
+    assert.strictEqual(entry.sourcePid, null);
+    assert.strictEqual(entry.requiresCompletionAck, false);
+
+    assert.strictEqual(api.dismissSession("kept-session"), true);
+    assert.strictEqual(api.buildSessionSnapshot().sessions.some((item) => item.id === "kept-session"), false);
+    api.cleanup();
+    api = require("../src/state")(retainedCtx());
+    assert.strictEqual(api.buildSessionSnapshot().sessions.some((item) => item.id === "kept-session"), false);
+  });
+});
+
 /** Create a raw session object for direct Map insertion */
 function rawSession(state, opts = {}) {
   return {

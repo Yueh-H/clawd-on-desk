@@ -355,11 +355,17 @@ module.exports = function initSessionHud(ctx) {
     return typeof ctx.getMiniTransitioning === "function" && ctx.getMiniTransitioning();
   }
 
+  function shouldShowIdleSessions() {
+    // Manual retention is an archive contract: an idle row must stay visible
+    // even when the independent "show idle" preference is off.
+    return ctx.sessionHudManualRetention === true || ctx.sessionHudShowIdle !== false;
+  }
+
   function baseEligible(snapshot = latestSnapshot) {
     return evaluateBaseEligible({
       snapshot,
       sessionHudEnabled: ctx.sessionHudEnabled,
-      sessionHudShowIdle: ctx.sessionHudShowIdle,
+      sessionHudShowIdle: shouldShowIdleSessions(),
       petHidden: ctx.petHidden,
       miniMode: getMiniMode(),
       miniTransitioning: getMiniTransitioning(),
@@ -430,7 +436,7 @@ module.exports = function initSessionHud(ctx) {
     // unscaled expectation makes the auto-hide hot zone smaller than the
     // real window, so the cursor "leaves" while still visually over it.
     const hudEnabled = ctx.sessionHudEnabled !== false;
-    const showIdle = ctx.sessionHudShowIdle !== false;
+    const showIdle = shouldShowIdleSessions();
     const hasSessions = snapshotHasVisibleSessions(snapshot, showIdle);
     let contentBounds = null;
     if (hudEnabled && hasSessions) {
@@ -482,7 +488,7 @@ module.exports = function initSessionHud(ctx) {
     const result = evaluateShouldShow({
       snapshot: latestSnapshot,
       sessionHudEnabled: ctx.sessionHudEnabled,
-      sessionHudShowIdle: ctx.sessionHudShowIdle,
+      sessionHudShowIdle: shouldShowIdleSessions(),
       sessionHudPinned: ctx.sessionHudPinned,
       clickRevealed,
       inHotZone,
@@ -640,7 +646,8 @@ module.exports = function initSessionHud(ctx) {
     hudWindow.webContents.send("session-hud:session-snapshot", {
       ...snapshot,
       hudMaxRows: getHudMaxExpandedRows(ctx.sessionHudMaxRows),
-      hudShowIdle: ctx.sessionHudShowIdle !== false,
+      hudShowIdle: shouldShowIdleSessions(),
+      hudManualRetention: ctx.sessionHudManualRetention === true,
       hudShowStateLabels: ctx.sessionHudShowStateLabels !== false,
       hudShowElapsed: ctx.sessionHudShowElapsed !== false,
       hudShowContextUsage: ctx.sessionHudShowContextUsage !== false,
@@ -886,7 +893,7 @@ module.exports = function initSessionHud(ctx) {
       : { x: 0, y: 0, width: 1280, height: 800 };
     const layout = computeHudLayout(snapshot, {
       maxRows: ctx.sessionHudMaxRows,
-      showIdle: ctx.sessionHudShowIdle !== false,
+      showIdle: shouldShowIdleSessions(),
     });
     const height = computeHudHeight(layout.rowCount);
     const width = getHudWidth(
@@ -949,7 +956,7 @@ module.exports = function initSessionHud(ctx) {
     // ── Session HUD (sessions only; gated by its own master, independent of
     // the quota ring) ──
     const hudEnabled = ctx.sessionHudEnabled !== false;
-    const hasSessions = snapshotHasVisibleSessions(snapshot, ctx.sessionHudShowIdle !== false);
+    const hasSessions = snapshotHasVisibleSessions(snapshot, shouldShowIdleSessions());
     const hudComputed = show && hudEnabled && hasSessions ? computeBounds(snapshot, scale) : null;
     if (!hudComputed) {
       hideSessionHud();
@@ -981,7 +988,7 @@ module.exports = function initSessionHud(ctx) {
     const scale = getTextScale();
     const hudComputed = shouldShow(snapshot)
       && ctx.sessionHudEnabled !== false
-      && snapshotHasVisibleSessions(snapshot, ctx.sessionHudShowIdle !== false)
+      && snapshotHasVisibleSessions(snapshot, shouldShowIdleSessions())
       ? computeBounds(snapshot, scale)
       : null;
     syncQuotaRing(snapshot, scale, hudComputed ? hudComputed.contentBounds : null, {
