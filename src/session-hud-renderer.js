@@ -16,6 +16,7 @@ let i18nPayload = { lang: "en", translations: {} };
 const unreadSessions = new Set();
 const prevBadges = new Map();
 const pendingFolderSessions = new Set();
+const pendingResumeSessions = new Set();
 const pendingDeleteSessions = new Set();
 let sessionActionFeedback = null;
 let sessionActionFeedbackTimer = null;
@@ -200,6 +201,7 @@ function usageChipInfo(session) {
 const BELL_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
 const FOCUS_UNAVAILABLE_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l16 16"/><path d="M9.5 5h5"/><path d="M7 9h10"/><path d="M5 14h9"/><path d="M12 19h5"/></svg>`;
 const FOLDER_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h6l2 2h10v9H3z"/><path d="M3 7V5h6l2 2"/></svg>`;
+const RECONNECT_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>`;
 const PIN_SVG_FILLED = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 4l6 6-4 1-3 3 1 5-2 1-4-4-5 5-1-1 5-5-4-4 1-2 5 1 3-3 1-4z"/></svg>`;
 const PIN_SVG_OUTLINE = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M14 4l6 6-4 1-3 3 1 5-2 1-4-4-5 5-1-1 5-5-4-4 1-2 5 1 3-3 1-4z"/></svg>`;
 
@@ -274,6 +276,7 @@ function createRowForSession(session, now) {
   const row = document.createElement("div");
   row.className = "row";
   const canFocus = session.canFocus === true;
+  const canResume = session.canResume === true;
   const feedbackText = sessionFeedbackText(session.id, now);
   if (!canFocus) {
     row.classList.add("row-unfocusable");
@@ -350,13 +353,45 @@ function createRowForSession(session, now) {
   }
 
   if (!canFocus) {
-    if (!feedbackText) {
+    if (!feedbackText && !canResume) {
       const marker = document.createElement("span");
       marker.className = "focus-unavailable";
       marker.innerHTML = FOCUS_UNAVAILABLE_SVG;
       marker.title = focusUnavailableTooltip(session);
       marker.setAttribute("aria-label", focusUnavailableTooltip(session));
       right.appendChild(marker);
+      hasRightContent = true;
+    }
+
+    if (canResume) {
+      const reconnect = document.createElement("button");
+      reconnect.type = "button";
+      reconnect.className = "resume-session-button";
+      reconnect.innerHTML = RECONNECT_SVG;
+      reconnect.title = t("sessionHudReconnectSession");
+      reconnect.setAttribute("aria-label", t("sessionHudReconnectSession"));
+      reconnect.disabled = pendingResumeSessions.has(session.id);
+      reconnect.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (pendingResumeSessions.has(session.id)) return;
+        pendingResumeSessions.add(session.id);
+        reconnect.disabled = true;
+        render();
+        let feedbackMessage = "";
+        try {
+          const result = await window.sessionHudAPI.resumeSession(session.id);
+          feedbackMessage = result && result.status === "ok"
+            ? t("sessionHudReconnectStarted")
+            : t("sessionHudReconnectFailed");
+        } catch (err) {
+          feedbackMessage = t("sessionHudReconnectFailed");
+          console.warn("resume retained session threw:", err);
+        }
+        pendingResumeSessions.delete(session.id);
+        showSessionFeedback(session.id, feedbackMessage);
+      });
+      right.appendChild(reconnect);
       hasRightContent = true;
     }
 
@@ -550,6 +585,9 @@ function render() {
   const currentIds = new Set(sessions.map((session) => session.id));
   for (const sessionId of pendingFolderSessions) {
     if (!currentIds.has(sessionId)) pendingFolderSessions.delete(sessionId);
+  }
+  for (const sessionId of pendingResumeSessions) {
+    if (!currentIds.has(sessionId)) pendingResumeSessions.delete(sessionId);
   }
   for (const sessionId of pendingDeleteSessions) {
     if (!currentIds.has(sessionId)) pendingDeleteSessions.delete(sessionId);

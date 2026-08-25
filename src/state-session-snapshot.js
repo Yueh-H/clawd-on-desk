@@ -3,6 +3,7 @@
 const path = require("path");
 const { sessionAliasKey } = require("./session-alias");
 const { getSessionFocusTarget } = require("./session-focus");
+const { getRetainedSessionResumeTarget } = require("./retained-session-resume");
 const {
   buildLatestLocalCodexProcessIds,
   isSupersededLocalCodexProcessSession,
@@ -325,6 +326,11 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
       osPlatform: options.focusHostPlatform || options.osPlatform,
     })
     : { canFocus: false, type: null, url: null };
+  const resumeTarget = manualRetained && !session.headless && state !== "sleeping" && !hiddenFromHud
+    ? getRetainedSessionResumeTarget({ ...(session || {}), id }, {
+      osPlatform: options.focusHostPlatform || options.osPlatform,
+    })
+    : { canResume: false, type: null };
   const source = deriveSourceInfo(session && session.host);
   const automationRecord = options.sessionAutomationRecord || null;
   const automationIdentity = session && session.sessionAutomationIdentity;
@@ -367,6 +373,7 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
     orcaPaneKey: (session && session.orcaPaneKey) || null,
     canFocus: focusTarget.canFocus === true,
     focusTarget: focusTarget.type ? { type: focusTarget.type, url: focusTarget.url || null } : null,
+    canResume: resumeTarget.canResume === true,
     host: (session && session.host) || null,
     wslDistro: (session && session.wslDistro) || null,
     sourceType: source.sourceType,
@@ -600,6 +607,7 @@ function sessionSnapshotSignature(snapshot) {
       wtHwnd: entry.wtHwnd,
       canFocus: entry.canFocus,
       focusTarget: entry.focusTarget,
+      canResume: entry.canResume,
       headless: entry.headless,
       hiddenFromHud: !!entry.hiddenFromHud,
       host: entry.host,

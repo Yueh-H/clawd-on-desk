@@ -103,6 +103,9 @@ function translations() {
     sessionHudDoubleClickToFocus: "Double-click to open this session",
     sessionHudDeleteSession: "Remove from Clawd",
     sessionHudDeleteFailed: "Could not remove this session.",
+    sessionHudReconnectSession: "Reconnect this session",
+    sessionHudReconnectStarted: "The original session was opened.",
+    sessionHudReconnectFailed: "Could not reconnect this session.",
     sessionMinAgo: "{n}m",
     sessionHrAgo: "{n}h",
     sessionBadgeIdle: "Idle",
@@ -216,13 +219,19 @@ async function loadDashboard(
   };
 }
 
-async function loadHud(sessions, openResult = { status: "ok" }, snapshotOverrides = {}) {
+async function loadHud(
+  sessions,
+  openResult = { status: "ok" },
+  snapshotOverrides = {},
+  resumeResult = { status: "ok" }
+) {
   const document = createDocument(["hud"]);
   const openCalls = [];
   const focusCalls = [];
   const ackCalls = [];
   const sessionMenuCalls = [];
   const deleteCalls = [];
+  const resumeCalls = [];
   let snapshotListener = null;
   let feedbackTimeout = null;
   const api = {
@@ -241,6 +250,10 @@ async function loadHud(sessions, openResult = { status: "ok" }, snapshotOverride
     deleteSession: async (...args) => {
       deleteCalls.push(args);
       return { status: "ok" };
+    },
+    resumeSession: async (...args) => {
+      resumeCalls.push(args);
+      return typeof resumeResult === "function" ? resumeResult(...args) : resumeResult;
     },
     ackCompletion: async (...args) => {
       ackCalls.push(args);
@@ -266,6 +279,7 @@ async function loadHud(sessions, openResult = { status: "ok" }, snapshotOverride
     ackCalls,
     sessionMenuCalls,
     deleteCalls,
+    resumeCalls,
     pushSnapshot: (nextSessions = sessions, nextSnapshotOverrides = {}) => snapshotListener({
       sessions: nextSessions,
       orderedIds: nextSessions.map((entry) => entry.id),
@@ -565,6 +579,43 @@ test("HUD manual retention shows a visible remove control that deletes only that
   assert.strictEqual(byClass(harness.root, "remove-session-button").length, 0);
 });
 
+test("HUD reconnect control resumes only the selected retained session", async () => {
+  const harness = await loadHud([
+    session("kept", { manualRetained: true, canResume: true }),
+    session("unsupported", { manualRetained: true, canResume: false }),
+  ], undefined, {
+    hudShowIdle: true,
+    hudManualRetention: true,
+  });
+
+  const reconnect = byClass(harness.root, "resume-session-button");
+  assert.strictEqual(reconnect.length, 1);
+  assert.strictEqual(reconnect[0].title, "Reconnect this session");
+  await reconnect[0].dispatch("click");
+
+  assert.deepStrictEqual(harness.resumeCalls, [["kept"]]);
+  assert.deepStrictEqual(harness.focusCalls, []);
+  assert.strictEqual(
+    byClass(harness.root, "session-inline-feedback")[0].textContent,
+    "The original session was opened."
+  );
+});
+
+test("HUD reconnect control exposes a localized failure", async () => {
+  const harness = await loadHud([
+    session("kept", { manualRetained: true, canResume: true }),
+  ], undefined, {
+    hudShowIdle: true,
+    hudManualRetention: true,
+  }, { status: "error", reason: "agent-cli-unavailable" });
+
+  await byClass(harness.root, "resume-session-button")[0].dispatch("click");
+  assert.strictEqual(
+    byClass(harness.root, "session-inline-feedback")[0].textContent,
+    "Could not reconnect this session."
+  );
+});
+
 test("HUD folder click sends only id and exposes open failure", async () => {
   const { root, openCalls } = await loadHud([session("local")], { status: "not-available" });
   await byClass(root, "open-folder-button")[0].dispatch("click");
@@ -611,6 +662,9 @@ test("HUD interaction and folder feedback copy exists in all supported languages
     "sessionHudDoubleClickToFocus",
     "sessionHudDeleteSession",
     "sessionHudDeleteFailed",
+    "sessionHudReconnectSession",
+    "sessionHudReconnectStarted",
+    "sessionHudReconnectFailed",
     "sessionOpenFolderFailed",
     "sessionOpenFolderUnavailable",
     "sessionFocusUnavailableRemote",

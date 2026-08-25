@@ -204,6 +204,13 @@ describe("session HUD visual shell", () => {
     assert.match(sessionHudPreload, /session-hud:delete-session/);
   });
 
+  it("offers an explicit reconnect action for resumable historical rows", () => {
+    assert.match(sessionHudHtml, /\.resume-session-button\s*\{/);
+    assert.match(sessionHudRenderer, /session\.canResume\s*===\s*true/);
+    assert.match(sessionHudRenderer, /resumeSession\(session\.id\)/);
+    assert.match(sessionHudPreload, /session-hud:resume-session/);
+  });
+
   it("shows the resolved agent name in each compact row", () => {
     assert.match(sessionHudHtml, /\.agent-name\s*\{[\s\S]*max-width:\s*96px;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*\}/);
     assert.match(sessionHudRenderer, /function agentLabelFor\(session\)/);

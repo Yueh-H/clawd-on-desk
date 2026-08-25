@@ -61,12 +61,22 @@ function createHarness(overrides = {}) {
     webContents: dashboardWebContents,
     isDestroyed: () => false,
   };
+  const hudMainFrame = { url: "file:///session-hud.html" };
+  const hudWebContents = { mainFrame: hudMainFrame };
+  const hudWindow = {
+    webContents: hudWebContents,
+    isDestroyed: () => false,
+  };
   const runtime = registerSessionIpc({
     ipcMain,
     getSessionSnapshot: overrides.getSessionSnapshot || (() => ({ sessions: [{ id: "s1" }] })),
     getI18n: overrides.getI18n || (() => ({ lang: "en", translations: { title: "Sessions" } })),
     focusSession: overrides.focusSession || ((sessionId, options) => {
       calls.push(["focusSession", sessionId, options]);
+    }),
+    resumeSession: overrides.resumeSession || (async (sessionId) => {
+      calls.push(["resumeSession", sessionId]);
+      return { status: "ok" };
     }),
     hideSession: overrides.hideSession || ((sessionId) => {
       calls.push(["hideSession", sessionId]);
@@ -103,6 +113,7 @@ function createHarness(overrides = {}) {
       return { status: "applied" };
     }),
     getDashboardWindow: overrides.getDashboardWindow || (() => dashboardWindow),
+    getSessionHudWindow: overrides.getSessionHudWindow || (() => hudWindow),
     getKimiQuotaStatus: overrides.getKimiQuotaStatus || (() => ({
       status: "ok",
       configured: true,
@@ -123,6 +134,10 @@ function createHarness(overrides = {}) {
       sender: dashboardWebContents,
       senderFrame: dashboardMainFrame,
     },
+    trustedHudEvent: {
+      sender: hudWebContents,
+      senderFrame: hudMainFrame,
+    },
   };
 }
 
@@ -142,6 +157,7 @@ test("session IPC registers owned channels and disposes them", () => {
     "session-hud:delete-session",
     "session-hud:get-i18n",
     "session-hud:open-session-folder",
+    "session-hud:resume-session",
     "session-hud:show-session-menu",
     "session:ack-completion",
   ]);
@@ -161,7 +177,7 @@ test("session IPC registers owned channels and disposes them", () => {
 });
 
 test("session IPC delegates dashboard and HUD behavior", async () => {
-  const { ipcMain, calls } = createHarness();
+  const { ipcMain, calls, trustedHudEvent } = createHarness();
 
   assert.deepStrictEqual(await ipcMain.invoke("dashboard:get-snapshot"), {
     sessions: [{ id: "s1" }],
@@ -202,6 +218,10 @@ test("session IPC delegates dashboard and HUD behavior", async () => {
     await ipcMain.invoke("session-hud:open-session-folder", "hud-folder-session"),
     { status: "ok" }
   );
+  assert.deepStrictEqual(
+    await ipcMain.invokeFrom(trustedHudEvent, "session-hud:resume-session", "hud-resume-session"),
+    { status: "ok" }
+  );
 
   assert.deepStrictEqual(calls, [
     ["focusSession", "dash-session", { requestSource: "dashboard" }],
@@ -214,6 +234,7 @@ test("session IPC delegates dashboard and HUD behavior", async () => {
     ["setSessionAlias", { sessionId: "s1", alias: "Frontend" }],
     ["openSessionFolder", "folder-session"],
     ["openSessionFolder", "hud-folder-session"],
+    ["resumeSession", "hud-resume-session"],
   ]);
 });
 
@@ -242,6 +263,25 @@ test("HUD delete IPC accepts only a sessionId string", async () => {
   for (const bad of [null, undefined, "", 42, { sessionId: "s1" }]) {
     const result = await ipcMain.invoke("session-hud:delete-session", bad);
     assert.strictEqual(result.status, "error");
+  }
+  assert.deepStrictEqual(calls, []);
+});
+
+test("HUD resume IPC accepts only a session id from the real HUD frame", async () => {
+  const { ipcMain, calls, trustedHudEvent } = createHarness();
+  for (const bad of [null, undefined, "", 42, { sessionId: "s1" }]) {
+    const result = await ipcMain.invokeFrom(trustedHudEvent, "session-hud:resume-session", bad);
+    assert.strictEqual(result.status, "error");
+  }
+  for (const event of [
+    { sender: trustedHudEvent.sender },
+    { sender: {}, senderFrame: trustedHudEvent.senderFrame },
+    { sender: trustedHudEvent.sender, senderFrame: { ...trustedHudEvent.senderFrame } },
+  ]) {
+    assert.deepStrictEqual(
+      await ipcMain.invokeFrom(event, "session-hud:resume-session", "s1"),
+      { status: "error", reason: "untrusted-session-hud-sender" }
+    );
   }
   assert.deepStrictEqual(calls, []);
 });
@@ -376,6 +416,7 @@ test("registerSessionIpc requires ackSessionCompletion dep", () => {
       getSessionSnapshot: () => ({}),
       getI18n: () => ({}),
       focusSession: () => {},
+      resumeSession: () => {},
       hideSession: () => {},
       showSessionHudMenu: () => {},
       setSessionAlias: () => {},

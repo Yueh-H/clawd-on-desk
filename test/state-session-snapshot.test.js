@@ -135,6 +135,7 @@ describe("manual-retained session snapshots", () => {
     assert.strictEqual(entry.hiddenFromHud, false);
     assert.strictEqual(entry.canFocus, false);
     assert.strictEqual(entry.focusTarget, null);
+    assert.strictEqual(entry.canResume, true);
     assert.strictEqual(entry.sessionAutomationMode, null);
     assert.strictEqual(entry.sessionAutomationGrantId, null);
     assert.strictEqual(entry.canConfigureSessionAutomation, false);

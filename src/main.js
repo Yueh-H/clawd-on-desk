@@ -115,6 +115,7 @@ const { registerPetInteractionIpc } = require("./pet-interaction-ipc");
 const { createSystemWakeRecovery } = require("./system-wake-recovery");
 const { formatLocalTimestamp } = require("./log-timestamp");
 const { launchClaudeSession, openTerminalAt } = require("./launch-claude");
+const { resumeRetainedSession } = require("./retained-session-resume");
 const { dialog: electronDialog } = require("electron");
 const initPermission = require("./permission");
 const { isPassiveNotifyEntry } = require("./passive-notify-entry");
@@ -175,6 +176,7 @@ const {
   createClaudeDesktopSessionResolver,
   focusClaudeDesktopSessionTarget,
 } = require("./claude-desktop-session-focus");
+const { createAntigravitySessionNavigator } = require("./antigravity-session-focus");
 const { isSessionInProgress } = require("./state-session-snapshot");
 const { restoreSessionsFromRecoveryLeases } = require("./session-recovery-loader");
 const { getAllAgents, getAgent } = require("../agents/registry");
@@ -2130,6 +2132,9 @@ const {
 const resolveClaudeDesktopSession = createClaudeDesktopSessionResolver({
   platform: process.platform,
 });
+const navigateAntigravityConversation = createAntigravitySessionNavigator({
+  platform: process.platform,
+});
 
 function getFocusableLocalHudSessionIds() {
   if (!_state || typeof _state.buildSessionSnapshot !== "function") return [];
@@ -2234,6 +2239,33 @@ function hideDashboardSession(sessionId) {
   return removed
     ? { status: "ok" }
     : { status: "not-found" };
+}
+
+async function resumeDashboardSession(sessionId) {
+  const id = typeof sessionId === "string" ? sessionId : "";
+  if (!id || !_state || typeof _state.buildSessionSnapshot !== "function") {
+    return { status: "error", reason: "session-state-unavailable" };
+  }
+  const snapshot = _state.buildSessionSnapshot();
+  const entry = Array.isArray(snapshot && snapshot.sessions)
+    ? snapshot.sessions.find((session) => session && session.id === id)
+    : null;
+  if (!entry || entry.manualRetained !== true) {
+    return { status: "unavailable", reason: "retained-session-not-found" };
+  }
+
+  return resumeRetainedSession(entry, {
+    osPlatform: process.platform,
+    navigateAntigravityConversation,
+    openCodexThread: async (url) => {
+      try {
+        await shell.openExternal(url);
+        return true;
+      } catch (_err) {
+        return false;
+      }
+    },
+  });
 }
 
 function showSessionHudContextMenu(event, sessionId) {
@@ -4251,6 +4283,7 @@ registerSessionIpc({
   getKimiQuotaStatus: () => _kimiQuotaRuntime.getStatus(),
   refreshKimiQuota: () => _kimiQuotaRuntime.refresh(),
   focusSession: (sessionId, options) => focusDashboardSession(sessionId, options),
+  resumeSession: (sessionId) => resumeDashboardSession(sessionId),
   hideSession: (sessionId) => hideDashboardSession(sessionId),
   showSessionHudMenu: (event, sessionId) => showSessionHudContextMenu(event, sessionId),
   openSessionFolder: (sessionId) => openDashboardSessionFolder(sessionId),
@@ -4278,6 +4311,7 @@ registerSessionIpc({
       console.warn("Clawd: failed to pin Session HUD:", result.message);
     }
   },
+  getSessionHudWindow: () => getSessionHudWindow(),
   getLanWsServer: () => _lanWss,
 });
 

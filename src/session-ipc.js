@@ -15,6 +15,7 @@ function registerSessionIpc(options = {}) {
   const getSessionSnapshot = requiredDependency(options.getSessionSnapshot, "getSessionSnapshot");
   const getI18n = requiredDependency(options.getI18n, "getI18n");
   const focusSession = requiredDependency(options.focusSession, "focusSession");
+  const resumeSession = requiredDependency(options.resumeSession, "resumeSession");
   const hideSession = requiredDependency(options.hideSession, "hideSession");
   const showSessionHudMenu = requiredDependency(options.showSessionHudMenu, "showSessionHudMenu");
   const setSessionAlias = requiredDependency(options.setSessionAlias, "setSessionAlias");
@@ -31,6 +32,7 @@ function registerSessionIpc(options = {}) {
     "clearSessionAutomationGrant"
   );
   const getDashboardWindow = requiredDependency(options.getDashboardWindow, "getDashboardWindow");
+  const getSessionHudWindow = requiredDependency(options.getSessionHudWindow, "getSessionHudWindow");
   const getKimiQuotaStatus = requiredDependency(options.getKimiQuotaStatus, "getKimiQuotaStatus");
   const refreshKimiQuota = requiredDependency(options.refreshKimiQuota, "refreshKimiQuota");
   const disposers = [];
@@ -61,6 +63,17 @@ function registerSessionIpc(options = {}) {
     return isTrustedDashboardEvent(event)
       ? null
       : { status: "error", reason: "untrusted-dashboard-sender" };
+  }
+
+  function isTrustedSessionHudEvent(event) {
+    const win = getSessionHudWindow();
+    if (!win || (typeof win.isDestroyed === "function" && win.isDestroyed())) return false;
+    const contents = win.webContents;
+    const frame = event && event.senderFrame;
+    return !!contents
+      && event.sender === contents
+      && !!frame
+      && frame === contents.mainFrame;
   }
 
   handle("dashboard:get-snapshot", () => getSessionSnapshot());
@@ -142,6 +155,15 @@ function registerSessionIpc(options = {}) {
       return { status: "error", message: "session-hud:open-session-folder requires a sessionId string" };
     }
     return openSessionFolder(sessionId);
+  });
+  handle("session-hud:resume-session", (event, sessionId) => {
+    if (typeof sessionId !== "string" || !sessionId) {
+      return { status: "error", message: "session-hud:resume-session requires a sessionId string" };
+    }
+    if (!isTrustedSessionHudEvent(event)) {
+      return { status: "error", reason: "untrusted-session-hud-sender" };
+    }
+    return resumeSession(sessionId);
   });
   on("session-hud:focus-session", (_event, sessionId) =>
     focusSession(sessionId, { requestSource: "hud" })
