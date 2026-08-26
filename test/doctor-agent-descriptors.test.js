@@ -35,6 +35,7 @@ describe("doctor agent descriptors", () => {
         "reasonix",
         "qoderwork",
         "qwenwork",
+        "grok",
         "deepseek-harness",
       ]
     );
@@ -58,6 +59,7 @@ describe("doctor agent descriptors", () => {
     const openclaw = require("../hooks/openclaw-install");
     const hermes = require("../hooks/hermes-install");
     const qoder = require("../hooks/qoder-install");
+    const grok = require("../hooks/grok-install");
 
     assert.strictEqual(getAgentDescriptor("claude-code").parentDir, claude.DEFAULT_PARENT_DIR);
     assert.strictEqual(getAgentDescriptor("claude-code").configPath, claude.DEFAULT_CONFIG_PATH);
@@ -99,6 +101,11 @@ describe("doctor agent descriptors", () => {
     assert.strictEqual(getAgentDescriptor("qwen-code").configPath, qwen.DEFAULT_CONFIG_PATH);
     assert.strictEqual(getAgentDescriptor("qwen-code").marker, qwen.MARKER);
     assert.deepStrictEqual(getAgentDescriptor("qwen-code").hookEvents, qwen.QWEN_CODE_HOOK_EVENTS);
+
+    assert.strictEqual(getAgentDescriptor("grok").parentDir, grok.DEFAULT_PARENT_DIR);
+    assert.strictEqual(getAgentDescriptor("grok").configPath, grok.DEFAULT_CONFIG_PATH);
+    assert.strictEqual(getAgentDescriptor("grok").marker, grok.MARKER);
+    assert.deepStrictEqual(getAgentDescriptor("grok").hookEvents, grok.GROK_HOOK_EVENTS);
 
     const zcode = require("../hooks/zcode-install");
     assert.strictEqual(getAgentDescriptor("zcode").parentDir, zcode.DEFAULT_PARENT_DIR);

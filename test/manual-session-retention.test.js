@@ -78,7 +78,11 @@ test("manual retention removes a card durably", () => {
   const { dir, persistPath } = makeTempStore();
   try {
     const store = createManualSessionRetentionStore({ persistPath });
-    store.upsertSession("session-1", { agentId: "claude-code", cwd: "/tmp" });
+    store.upsertSession("session-1", {
+      agentId: "claude-code",
+      sessionTitle: "Real Claude task",
+      cwd: "/tmp",
+    });
     store.flush();
     assert.strictEqual(store.remove("session-1"), true);
     assert.strictEqual(store.remove("session-1"), false);
@@ -89,4 +93,45 @@ test("manual retention removes a card durably", () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("manual retention prunes only untitled Claude rows with no recoverable evidence", () => {
+  const { dir, persistPath } = makeTempStore();
+  const realId = "be45d95f-b282-4d03-95f1-c8898811fd23";
+  const emptyId = "ffffffff-ffff-4fff-afff-ffffffffffff";
+  try {
+    fs.writeFileSync(persistPath, `${JSON.stringify({
+      version: 1,
+      sessions: [
+        { id: "real", rawSessionId: realId, agentId: "claude-code", sessionTitle: null },
+        { id: "empty", rawSessionId: emptyId, agentId: "claude-code", sessionTitle: null },
+        { id: "titled", rawSessionId: emptyId, agentId: "claude-code", sessionTitle: "Keep me" },
+      ],
+    })}\n`);
+
+    const store = createManualSessionRetentionStore({
+      persistPath,
+      hasStoredClaudeSessionEvidence: (entry) => entry.rawSessionId === realId,
+    });
+    assert.deepStrictEqual(store.listRecords().map((entry) => entry.id), ["real", "titled"]);
+    assert.strictEqual(store.flush(), true);
+    assert.deepStrictEqual(
+      JSON.parse(fs.readFileSync(persistPath, "utf8")).sessions.map((entry) => entry.id),
+      ["real", "titled"]
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("manual retention does not add a new empty Claude detector row", () => {
+  const store = createManualSessionRetentionStore({
+    hasStoredClaudeSessionEvidence: () => false,
+  });
+  assert.strictEqual(store.upsertSession("empty", {
+    agentId: "claude-code",
+    rawSessionId: "ffffffff-ffff-4fff-afff-ffffffffffff",
+    cwd: "/tmp/project",
+  }), false);
+  assert.deepStrictEqual(store.listRecords(), []);
 });

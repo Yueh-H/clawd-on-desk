@@ -60,3 +60,17 @@ below before they reach the running app.
     destructive/global editing combinations on the reserved-shortcut list.
 - If an upstream conflict changes runtime behavior, stop before push until the custom
   behavior is restored and revalidated.
+
+## Custom endpoint: GET /sessions (2026-08-21)
+
+- `src/main.js` adds `listVisibleSessions()` + exposes it on the server ctx;
+  `src/server.js` adds `GET /sessions` returning `{ ok, sessions: [...] }`.
+- Ordering/visibility MUST stay identical to `focusSessionByIndex` (same
+  snapshot, same headless/sleeping/hiddenFromHud filter): external tools map
+  "Key N" to the session `⌥N` would focus. If upstream changes the focus
+  ordering, update `listVisibleSessions` in the same commit.
+- Each entry: `index` (1-based), `id`, `agentId`, `state`, `title`, `cwd`,
+  `transcriptPath` (from the raw session record; the HUD snapshot omits it).
+- Consumer: `~/.claude/scripts/harvest_session_reply.py` (KeySilk Key1~6
+  「回貼」= `Option+Shift+1~6` via Hammerspoon → copy last reply → paste into
+  Heptabase). Validated with the full test suite (8401 pass, 0 fail).

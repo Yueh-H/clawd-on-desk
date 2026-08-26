@@ -209,6 +209,7 @@ const MANAGED_CLEANUP_AGENT_IDS = Object.freeze([
   "reasonix",
   "qoderwork",
   "qwenwork",
+  "grok",
 ]);
 
 // ── updateRegistry ──

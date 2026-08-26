@@ -733,12 +733,29 @@ function routeHttpRequest(req, res, remoteProfile = null) {
     } else if (req.method === "GET" && req.url && req.url.startsWith("/focus")) {
       const urlObj = new URL(req.url, "http://127.0.0.1");
       const index = parseInt(urlObj.searchParams.get("index") || "0", 10);
-      let ok = false;
-      if (typeof ctx.focusSessionByIndex === "function") {
-        ok = !!ctx.focusSessionByIndex(index);
+      let focusResult = false;
+      try {
+        focusResult = typeof ctx.focusSessionByIndex === "function"
+          ? ctx.focusSessionByIndex(index)
+          : false;
+      } catch (_err) {
+        focusResult = false;
       }
+      Promise.resolve(focusResult).then((ok) => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: !!ok, index }));
+      }).catch(() => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, index }));
+      });
+    } else if (req.method === "GET" && req.url === "/sessions") {
+      // Same ordering + visibility as /focus?index=N (see main.js
+      // listVisibleSessions), so callers can resolve "Key N" → transcript.
+      const sessions = typeof ctx.listVisibleSessions === "function"
+        ? (ctx.listVisibleSessions() || [])
+        : [];
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok, index }));
+      res.end(JSON.stringify({ ok: true, sessions }));
     } else if (req.method === "GET" && req.url === "/dashboard") {
       if (typeof ctx.showDashboard === "function") {
         ctx.showDashboard();

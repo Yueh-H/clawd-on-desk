@@ -10,6 +10,7 @@ const { resolveSessionIdentity } = require("./session-key");
 const { digestCodexTurnId } = require("./codex-turn-id");
 const createCodexTurnFence = require("./codex-turn-fence");
 const createCodexOfficialActivity = require("./codex-official-activity");
+const createGrokTurnFence = require("./grok-turn-fence");
 
 const CODEX_OFFICIAL_LOG_SUPPRESS_TTL_MS = 10 * 60 * 1000;
 const CODEX_LOG_EVENTS_COVERED_BY_OFFICIAL_HOOKS = new Set([
@@ -83,6 +84,7 @@ function createAgentRuntimeMain(options = {}) {
     debugLog,
     ttlMs: CODEX_OFFICIAL_LOG_SUPPRESS_TTL_MS,
   });
+  const grokTurnFence = createGrokTurnFence({ debugLog });
 
   function recordCodexTurnIdCapture(sessionId, source, event, turnId) {
     if (!CODEX_TURN_CAPTURE_EVENTS.has(event)) return;
@@ -144,6 +146,15 @@ function createAgentRuntimeMain(options = {}) {
         if (!fenceDecision.accept) return false;
       }
     }
+    if (opts && opts.agentId === "grok" && opts.hookSource === "grok-native") {
+      const fenceDecision = grokTurnFence.observe({
+        sessionId,
+        event,
+        promptId: opts.grokPromptId || null,
+        notificationType: opts.grokNotificationType || null,
+      });
+      if (!fenceDecision.accept) return false;
+    }
     const result = updateSession(sessionId, state, event, opts);
     maybeCaptureGhosttyTerminalId(sessionId, event, opts);
     return result;
@@ -195,6 +206,7 @@ function createAgentRuntimeMain(options = {}) {
 
   function clearSessionsByAgent(agentId) {
     if (agentId === "codex") resetLocalCodexLifecycleTracking();
+    if (agentId === "grok") grokTurnFence.clearAll();
     const state = getStateRuntime();
     return state && typeof state.clearSessionsByAgent === "function"
       ? state.clearSessionsByAgent(agentId)

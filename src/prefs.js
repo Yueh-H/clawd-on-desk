@@ -401,6 +401,9 @@ const SCHEMA = {
       "qoderwork": { integrationInstalled: false, enabled: false, permissionsEnabled: false, notificationHookEnabled: true },
       // QwenWork (千问办公) is state-only (Phase 1) — permission bubbles default off.
       "qwenwork": { integrationInstalled: false, enabled: false, permissionsEnabled: false, notificationHookEnabled: true },
+      // Grok owns its native permission UI. Clawd observes lifecycle and
+      // attention notifications only through ~/.grok/hooks/*.json.
+      grok: { integrationInstalled: false, enabled: false, permissionsEnabled: false, notificationHookEnabled: true },
     }),
     normalize: normalizeAgents,
   },

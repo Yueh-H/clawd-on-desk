@@ -13,6 +13,7 @@ const {
   sessionSnapshotSignature,
   sessionDisplayTitle,
   normalizeTitle,
+  shouldHideUnfocusableCodexExecFromNavigation,
 } = require("../src/state-session-snapshot");
 const { makeSessionKey } = require("../src/session-key");
 const { sessionAliasKey } = require("../src/session-alias");
@@ -135,9 +136,77 @@ describe("manual-retained session snapshots", () => {
     assert.strictEqual(entry.hiddenFromHud, false);
     assert.strictEqual(entry.canFocus, false);
     assert.strictEqual(entry.focusTarget, null);
+    assert.strictEqual(entry.canResume, true);
     assert.strictEqual(entry.sessionAutomationMode, null);
     assert.strictEqual(entry.sessionAutomationGrantId, null);
     assert.strictEqual(entry.canConfigureSessionAutomation, false);
+  });
+});
+
+describe("Codex exec session navigation", () => {
+  it("hides only unfocusable app-internal exec workers and keeps terminal exec sessions", () => {
+    const appInternal = session("working", {
+      agentId: "codex",
+      codexOriginator: " codex_exec ",
+      codexSource: " EXEC ",
+      updatedAt: 3000,
+      cwd: "/repo/background",
+    });
+    const terminalExec = session("working", {
+      agentId: "codex",
+      codexOriginator: "codex_exec",
+      codexSource: "exec",
+      sourcePid: 4242,
+      updatedAt: 2000,
+      cwd: "/repo/terminal",
+    });
+    const otherUnfocusableCodex = session("thinking", {
+      agentId: "codex",
+      codexOriginator: "codex-tui",
+      codexSource: "exec",
+      updatedAt: 1000,
+      cwd: "/repo/interactive",
+    });
+
+    assert.strictEqual(
+      shouldHideUnfocusableCodexExecFromNavigation("background", appInternal, {
+        focusHostPlatform: "darwin",
+      }),
+      true
+    );
+    assert.strictEqual(
+      shouldHideUnfocusableCodexExecFromNavigation("terminal", terminalExec, {
+        focusHostPlatform: "darwin",
+      }),
+      false
+    );
+    assert.strictEqual(
+      shouldHideUnfocusableCodexExecFromNavigation("interactive", otherUnfocusableCodex, {
+        focusHostPlatform: "darwin",
+      }),
+      false
+    );
+
+    const snapshot = buildSessionSnapshot(new Map([
+      ["background", appInternal],
+      ["terminal", terminalExec],
+      ["interactive", otherUnfocusableCodex],
+    ]), {
+      statePriority: STATE_PRIORITY,
+      focusHostPlatform: "darwin",
+    });
+
+    assert.deepStrictEqual(snapshot.sessions.map((entry) => entry.id), ["terminal", "interactive"]);
+    assert.deepStrictEqual(snapshot.orderedIds, ["terminal", "interactive"]);
+    assert.deepStrictEqual(snapshot.menuOrderedIds, ["terminal", "interactive"]);
+    assert.deepStrictEqual(snapshot.groups, [{
+      host: "",
+      ids: ["terminal", "interactive"],
+      displayHost: "",
+    }]);
+    assert.strictEqual(snapshot.lastSessionId, "terminal");
+    assert.strictEqual(snapshot.sessions[0].canFocus, true);
+    assert.deepStrictEqual(snapshot.sessions[0].focusTarget, { type: "terminal", url: null });
   });
 });
 

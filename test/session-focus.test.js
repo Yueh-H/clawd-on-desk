@@ -122,6 +122,42 @@ describe("session focus helpers", () => {
     assert.strictEqual(isFocusableLocalHudSession(noTerminalEntry, { osPlatform: "win32" }), false);
   });
 
+  it("uses exact Antigravity Desktop conversation focus only on macOS", () => {
+    const conversationId = "693b2deb-295f-451c-ae37-c2b9bbb76d77";
+    const desktopEntry = {
+      id: `antigravity:${conversationId}`,
+      agentId: "antigravity-cli",
+      state: "idle",
+      transcriptPath: `/Users/test/.gemini/antigravity/brain/${conversationId}/.system_generated/logs/transcript.jsonl`,
+    };
+    const cliEntry = {
+      ...desktopEntry,
+      sourcePid: 900,
+      agentPid: 901,
+      transcriptPath: `/Users/test/.gemini/antigravity-cli/brain/${conversationId}/.system_generated/logs/transcript.jsonl`,
+    };
+
+    assert.deepStrictEqual(getSessionFocusTarget(desktopEntry, { osPlatform: "darwin" }), {
+      canFocus: true,
+      type: "antigravity-session",
+      url: null,
+    });
+    assert.deepStrictEqual(getSessionFocusTarget(desktopEntry, { osPlatform: "win32" }), {
+      canFocus: false,
+      type: null,
+      url: null,
+    });
+    assert.deepStrictEqual(getSessionFocusTarget(cliEntry, { osPlatform: "darwin" }), {
+      canFocus: true,
+      type: "terminal",
+      url: null,
+    });
+    assert.deepStrictEqual(
+      getFocusableLocalHudSessionIds({ sessions: [desktopEntry] }, { osPlatform: "darwin" }),
+      [desktopEntry.id],
+    );
+  });
+
   it("allows only supported Orca pane targets to cross the remote boundary", () => {
     const remoteOrca = {
       id: "remote-orca",

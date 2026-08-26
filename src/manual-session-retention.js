@@ -9,10 +9,12 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { hasStoredClaudeSessionEvidence } = require("./claude-desktop-session");
 
 const FILE_VERSION = 1;
 const DEFAULT_PERSIST_PATH = path.join(os.homedir(), ".clawd", "retained-sessions.json");
 const PERSIST_DEBOUNCE_MS = 150;
+const CLAUDE_NEGATIVE_EVIDENCE_TTL_MS = 60 * 1000;
 
 function cleanText(value, maxLength) {
   if (typeof value !== "string") return "";
@@ -83,8 +85,36 @@ function toHistoricalSession(record) {
 function createManualSessionRetentionStore(options = {}) {
   const persistPath = options.persistPath || null;
   const logWarn = typeof options.logWarn === "function" ? options.logWarn : () => {};
+  const checkClaudeEvidence = typeof options.hasStoredClaudeSessionEvidence === "function"
+    ? options.hasStoredClaudeSessionEvidence
+    : hasStoredClaudeSessionEvidence;
+  const now = typeof options.now === "function" ? options.now : Date.now;
   const records = new Map();
+  const claudeEvidenceCache = new Map();
   let persistTimer = null;
+
+  function hasRecoverableClaudeEvidence(clean, source, { useCache = true } = {}) {
+    if (clean.agentId !== "claude-code" || clean.sessionTitle) return true;
+    const cacheKey = clean.rawSessionId;
+    const checkedAt = now();
+    const cached = useCache ? claudeEvidenceCache.get(cacheKey) : null;
+    if (
+      cached
+      && (cached.hasEvidence || checkedAt - cached.checkedAt < CLAUDE_NEGATIVE_EVIDENCE_TTL_MS)
+    ) {
+      return cached.hasEvidence;
+    }
+
+    let hasEvidence = false;
+    try {
+      hasEvidence = Boolean(checkClaudeEvidence({
+        ...clean,
+        transcriptPath: nullableText(source && source.transcriptPath, 4096),
+      }, options));
+    } catch (_err) {}
+    claudeEvidenceCache.set(cacheKey, { hasEvidence, checkedAt });
+    return hasEvidence;
+  }
 
   function load() {
     if (!persistPath) return;
@@ -96,10 +126,17 @@ function createManualSessionRetentionStore(options = {}) {
       return;
     }
     if (!parsed || parsed.version !== FILE_VERSION || !Array.isArray(parsed.sessions)) return;
+    let pruned = false;
     for (const item of parsed.sessions) {
       const clean = sanitizeSession(item && item.id, item);
-      if (clean) records.set(clean.id, clean);
+      if (!clean) continue;
+      if (!hasRecoverableClaudeEvidence(clean, item, { useCache: false })) {
+        pruned = true;
+        continue;
+      }
+      records.set(clean.id, clean);
     }
+    if (pruned) schedulePersist();
   }
 
   function persistNow() {
@@ -136,6 +173,7 @@ function createManualSessionRetentionStore(options = {}) {
     const clean = sanitizeSession(id, session);
     if (!clean) return false;
     const previous = records.get(clean.id);
+    if (!previous && !hasRecoverableClaudeEvidence(clean, session)) return false;
     if (previous && JSON.stringify(previous) === JSON.stringify(clean)) return false;
     records.set(clean.id, clean);
     schedulePersist();

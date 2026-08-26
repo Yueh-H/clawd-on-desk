@@ -16,6 +16,7 @@ let i18nPayload = { lang: "en", translations: {} };
 const unreadSessions = new Set();
 const prevBadges = new Map();
 const pendingFolderSessions = new Set();
+const pendingResumeSessions = new Set();
 const pendingDeleteSessions = new Set();
 let sessionActionFeedback = null;
 let sessionActionFeedbackTimer = null;
@@ -200,10 +201,11 @@ function usageChipInfo(session) {
 const BELL_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
 const FOCUS_UNAVAILABLE_SVG = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4l16 16"/><path d="M9.5 5h5"/><path d="M7 9h10"/><path d="M5 14h9"/><path d="M12 19h5"/></svg>`;
 const FOLDER_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h6l2 2h10v9H3z"/><path d="M3 7V5h6l2 2"/></svg>`;
+const RECONNECT_SVG = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></svg>`;
 const PIN_SVG_FILLED = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 4l6 6-4 1-3 3 1 5-2 1-4-4-5 5-1-1 5-5-4-4 1-2 5 1 3-3 1-4z"/></svg>`;
 const PIN_SVG_OUTLINE = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M14 4l6 6-4 1-3 3 1 5-2 1-4-4-5 5-1-1 5-5-4-4 1-2 5 1 3-3 1-4z"/></svg>`;
 
-function updateUnread(sessions) {
+function updateUnread(sessions, acknowledgedCompletionIds = []) {
   const now = Date.now();
   const currentIds = new Set(sessions.map((s) => s.id));
   for (const id of unreadSessions) {
@@ -227,6 +229,7 @@ function updateUnread(sessions) {
   for (const id of prevBadges.keys()) {
     if (!currentIds.has(id)) prevBadges.delete(id);
   }
+  for (const id of acknowledgedCompletionIds) unreadSessions.delete(id);
 }
 
 function splitHudLayout(sessions) {
@@ -270,12 +273,34 @@ function openFolderFailureText(result) {
   return t("sessionOpenFolderUnavailable");
 }
 
-function createRowForSession(session, now) {
+async function resumeAndOpenSession(sessionId) {
+  if (pendingResumeSessions.has(sessionId)) return;
+  pendingResumeSessions.add(sessionId);
+  render();
+
+  let feedbackMessage = "";
+  try {
+    const result = await window.sessionHudAPI.resumeSession(sessionId);
+    feedbackMessage = result && result.status === "ok"
+      ? t("sessionHudReconnectStarted")
+      : t("sessionHudReconnectFailed");
+  } catch (err) {
+    feedbackMessage = t("sessionHudReconnectFailed");
+    console.warn("resume retained session threw:", err);
+  }
+
+  pendingResumeSessions.delete(sessionId);
+  showSessionFeedback(sessionId, feedbackMessage);
+}
+
+function createRowForSession(session, now, rowNumber) {
   const row = document.createElement("div");
   row.className = "row";
   const canFocus = session.canFocus === true;
+  const canResume = session.canResume === true;
+  const canNavigate = canFocus || canResume;
   const feedbackText = sessionFeedbackText(session.id, now);
-  if (!canFocus) {
+  if (!canNavigate) {
     row.classList.add("row-unfocusable");
     row.title = focusUnavailableTooltip(session);
   } else {
@@ -285,6 +310,12 @@ function createRowForSession(session, now) {
 
   const left = document.createElement("div");
   left.className = "left";
+
+  const index = document.createElement("span");
+  index.className = "row-index";
+  index.textContent = String(rowNumber);
+  index.setAttribute("aria-hidden", "true");
+  left.appendChild(index);
 
   const dot = document.createElement("span");
   dot.className = `dot dot-${session.badge || "idle"}`;
@@ -323,14 +354,14 @@ function createRowForSession(session, now) {
     title.title = feedbackText;
     title.setAttribute("aria-live", "polite");
   } else if (shortTitle && shortTitle !== fullTitle) {
-    title.title = canFocus
+    title.title = canNavigate
       ? `${fullTitle}\n${t("sessionHudDoubleClickToFocus")}`
       : fullTitle;
   }
   left.appendChild(title);
   row.setAttribute(
     "aria-label",
-    `${agentLabel} · ${fullTitle} · ${row.title}`
+    `${rowNumber}. ${agentLabel} · ${fullTitle} · ${row.title}`
   );
 
   const showElapsed = snapshot.hudShowElapsed !== false;
@@ -350,13 +381,30 @@ function createRowForSession(session, now) {
   }
 
   if (!canFocus) {
-    if (!feedbackText) {
+    if (!feedbackText && !canResume) {
       const marker = document.createElement("span");
       marker.className = "focus-unavailable";
       marker.innerHTML = FOCUS_UNAVAILABLE_SVG;
       marker.title = focusUnavailableTooltip(session);
       marker.setAttribute("aria-label", focusUnavailableTooltip(session));
       right.appendChild(marker);
+      hasRightContent = true;
+    }
+
+    if (canResume) {
+      const reconnect = document.createElement("button");
+      reconnect.type = "button";
+      reconnect.className = "resume-session-button";
+      reconnect.innerHTML = RECONNECT_SVG;
+      reconnect.title = t("sessionHudReconnectSession");
+      reconnect.setAttribute("aria-label", t("sessionHudReconnectSession"));
+      reconnect.disabled = pendingResumeSessions.has(session.id);
+      reconnect.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        await resumeAndOpenSession(session.id);
+      });
+      right.appendChild(reconnect);
       hasRightContent = true;
     }
 
@@ -473,7 +521,7 @@ function createRowForSession(session, now) {
 
   row.addEventListener("click", () => {
     acknowledgeCompletion();
-    if (!canFocus) {
+    if (!canNavigate) {
       showSessionFeedback(session.id, focusUnavailableTooltip(session));
     }
   });
@@ -491,12 +539,14 @@ function createRowForSession(session, now) {
     });
   });
 
-  row.addEventListener("dblclick", (event) => {
+  row.addEventListener("dblclick", async (event) => {
     event.preventDefault();
     event.stopPropagation();
     acknowledgeCompletion();
     if (canFocus) {
       window.sessionHudAPI.focusSession(session.id);
+    } else if (canResume) {
+      await resumeAndOpenSession(session.id);
     } else {
       showSessionFeedback(session.id, focusUnavailableTooltip(session));
     }
@@ -551,6 +601,9 @@ function render() {
   for (const sessionId of pendingFolderSessions) {
     if (!currentIds.has(sessionId)) pendingFolderSessions.delete(sessionId);
   }
+  for (const sessionId of pendingResumeSessions) {
+    if (!currentIds.has(sessionId)) pendingResumeSessions.delete(sessionId);
+  }
   for (const sessionId of pendingDeleteSessions) {
     if (!currentIds.has(sessionId)) pendingDeleteSessions.delete(sessionId);
   }
@@ -559,7 +612,7 @@ function render() {
     sessionActionFeedbackTimer = null;
     sessionActionFeedback = null;
   }
-  updateUnread(sessions);
+  updateUnread(sessions, snapshot.acknowledgedCompletionIds);
   hudEl.replaceChildren();
   hudEl.classList.add("has-pin");
   // The HUD shows sessions only; account quota now lives in the pet-attached
@@ -569,9 +622,9 @@ function render() {
   const now = Date.now();
   const { expanded, folded } = splitHudLayout(sessions);
 
-  for (const session of expanded) {
-    hudEl.appendChild(createRowForSession(session, now));
-  }
+  expanded.forEach((session, index) => {
+    hudEl.appendChild(createRowForSession(session, now, index + 1));
+  });
   if (folded.length > 0) {
     hudEl.appendChild(createFoldedRow(folded.length));
   }
@@ -597,7 +650,6 @@ async function init() {
     snapshot = nextSnapshot || snapshot;
     render();
   });
-
   i18nPayload = await window.sessionHudAPI.getI18n() || i18nPayload;
   render();
   setInterval(updateElapsedLabels, 1000);

@@ -296,6 +296,9 @@ function buildStateBody(hookName, payload, options = {}) {
   };
 
   if (cwd) body.cwd = cwd;
+  if (typeof (payload && payload.transcriptPath) === "string" && payload.transcriptPath) {
+    body.transcript_path = payload.transcriptPath;
+  }
 
   if (options.remote) {
     body.host = options.host || readHostPrefix();

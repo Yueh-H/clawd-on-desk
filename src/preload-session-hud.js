@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("sessionHudAPI", {
   showSessionMenu: (sessionId) => ipcRenderer.invoke("session-hud:show-session-menu", sessionId),
   deleteSession: (sessionId) => ipcRenderer.invoke("session-hud:delete-session", sessionId),
   openSessionFolder: (sessionId) => ipcRenderer.invoke("session-hud:open-session-folder", sessionId),
+  resumeSession: (sessionId) => ipcRenderer.invoke("session-hud:resume-session", sessionId),
   openDashboard: () => ipcRenderer.send("session-hud:open-dashboard"),
   setPinned: (value) => ipcRenderer.send("session-hud:set-pinned", !!value),
   ackCompletion: (sessionId) => ipcRenderer.invoke("session:ack-completion", sessionId),

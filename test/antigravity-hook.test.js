@@ -34,6 +34,7 @@ describe("Antigravity hook script", () => {
     const result = await __test.sendHookEvent({
       conversationId: "c1",
       workspacePaths: [process.cwd()],
+      transcriptPath: "/Users/test/.gemini/antigravity/brain/c1/.system_generated/logs/transcript.jsonl",
     }, "PreInvocation", {
       env: {},
       postState: (body, _options, callback) => {
@@ -49,6 +50,10 @@ describe("Antigravity hook script", () => {
     assert.strictEqual(postedBodies[0].state, "thinking");
     assert.strictEqual(postedBodies[0].event, "UserPromptSubmit");
     assert.strictEqual(postedBodies[0].cwd, process.cwd());
+    assert.strictEqual(
+      postedBodies[0].transcript_path,
+      "/Users/test/.gemini/antigravity/brain/c1/.system_generated/logs/transcript.jsonl",
+    );
   });
 
   it("threads the resolved env into the bodies it builds", async () => {

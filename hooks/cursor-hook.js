@@ -16,6 +16,18 @@ const {
   processAlive,
 } = require("./shared-process");
 
+// Grok imports ~/.cursor/hooks.json for compatibility. Its native adapter is
+// the sole Clawd reporter; imported Cursor hooks must fail open before reading
+// Grok's different camelCase payload or they create a duplicate cursor/default
+// HUD row beside the real Grok session.
+if (
+  (typeof process.env.GROK_SESSION_ID === "string" && process.env.GROK_SESSION_ID.trim())
+  || (typeof process.env.GROK_HOOK_EVENT === "string" && process.env.GROK_HOOK_EVENT.trim())
+) {
+  process.stdout.write("{}\n");
+  process.exit(0);
+}
+
 const HOOK_TO_STATE = {
   sessionStart: { state: "idle", event: "SessionStart" },
   sessionEnd: { state: "sleeping", event: "SessionEnd" },

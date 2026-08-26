@@ -280,7 +280,12 @@ describe("state agent icons", () => {
     assert.strictEqual(archivedKimiPng.license, "MIT");
     assert.strictEqual(archivedKimiPng.variant, "light");
 
-    const officialWebsiteSvgIds = [...selectedLobeHubIds, "kimi-cli"].sort();
+    assert.strictEqual(manifest.sources.grok.upstreamPackage, "@lobehub/icons-static-svg");
+    assert.strictEqual(manifest.sources.grok.upstreamVersion, "1.94.0");
+    assert.strictEqual(manifest.sources.grok.license, "MIT");
+    assert.strictEqual(manifest.sources.grok.variant, "light");
+
+    const officialWebsiteSvgIds = [...selectedLobeHubIds, "grok", "kimi-cli"].sort();
     assert.deepStrictEqual(Object.keys(manifest.svgSources).sort(), officialWebsiteSvgIds);
     assert.deepStrictEqual(LOBE_ICONS_OFFICIAL_WEBSITE, {
       upstreamName: "Lobe Icons",
@@ -383,6 +388,7 @@ describe("state agent icons", () => {
       codex: "neutral-light-tile",
       "copilot-cli": "neutral-light-tile",
       "cursor-agent": "neutral-light-tile",
+      grok: "neutral-light-tile",
       hermes: "neutral-light-tile",
       mimocode: "neutral-light-tile",
       opencode: "neutral-light-tile",

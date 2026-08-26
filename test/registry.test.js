@@ -30,6 +30,7 @@ describe("Agent Registry", () => {
       "qoderwork",
       "qwenwork",
       "workbuddy",
+      "grok",
     ]);
   });
 
@@ -53,6 +54,7 @@ describe("Agent Registry", () => {
     assert.strictEqual(registry.getAgent("qoderwork").name, "QoderWork");
     assert.strictEqual(registry.getAgent("qwenwork").name, "QwenWork");
     assert.strictEqual(registry.getAgent("workbuddy").name, "WorkBuddy");
+    assert.strictEqual(registry.getAgent("grok").name, "Grok CLI");
     assert.strictEqual(registry.getAgent("nonexistent"), undefined);
   });
 
@@ -110,6 +112,8 @@ describe("Agent Registry", () => {
       "WorkBuddy AI Helper",
       "WorkBuddy AI Helper (Renderer)",
     ]);
+
+    assert.deepStrictEqual(registry.getAgent("grok").processNames.win, ["grok.exe"]);
   });
 
   it("should include explicit Linux process names", () => {
@@ -148,6 +152,8 @@ describe("Agent Registry", () => {
 
     const codewhale = registry.getAgent("codewhale");
     assert.deepStrictEqual(codewhale.processNames.linux, ["codewhale"]);
+
+    assert.deepStrictEqual(registry.getAgent("grok").processNames.linux, ["grok"]);
 
     const qoder = registry.getAgent("qoder");
     assert.deepStrictEqual(qoder.processNames.linux, ["qoder", "qodercli", "qoder-cli"]);

@@ -105,6 +105,13 @@ function normalizeAssistantLastOutput(value) {
     : text;
 }
 
+function normalizeGrokOpaqueField(value, maxLength = 256) {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text || text.length > maxLength || /[\0\r\n]/.test(text)) return null;
+  return text;
+}
+
 function normalizeContextUsage(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const used = Number(value.used);
@@ -236,6 +243,12 @@ function handleStatePost(req, res, options) {
       const rawAgentPid = data.agent_pid ?? data.claude_pid ?? data.cursor_pid;
       const agentPid = Number.isFinite(rawAgentPid) && rawAgentPid > 0 ? Math.floor(rawAgentPid) : null;
       const agentId = agentIdentity.agentId;
+      const grokPromptId = agentId === "grok"
+        ? normalizeGrokOpaqueField(data.grok_prompt_id)
+        : null;
+      const grokNotificationType = agentId === "grok"
+        ? normalizeGrokOpaqueField(data.grok_notification_type, 64)
+        : null;
       const trustedProfileId = remoteProfile && typeof remoteProfile.profileId === "string"
         ? remoteProfile.profileId
         : "local";
@@ -873,6 +886,8 @@ function handleStatePost(req, res, options) {
             preserveState,
             hookSource,
             ...(codexHookState.turnId ? { turnId: codexHookState.turnId } : {}),
+            ...(grokPromptId ? { grokPromptId } : {}),
+            ...(grokNotificationType ? { grokNotificationType } : {}),
             backgroundTasksCount,
             sessionCronsCount,
             stopHookActive,

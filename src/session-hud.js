@@ -323,6 +323,7 @@ module.exports = function initSessionHud(ctx) {
   let hudWindow = null;
   let didFinishLoad = false;
   let latestSnapshot = null;
+  const acknowledgedCompletionIds = new Set();
   let hudFlippedAbove = false;
   let lastReservedOffset = 0;
   const hiddenDestroyTimers = { hud: null, ring: null };
@@ -653,7 +654,31 @@ module.exports = function initSessionHud(ctx) {
       hudShowContextUsage: ctx.sessionHudShowContextUsage !== false,
       hudShowQuota: ctx.sessionHudShowQuota !== false,
       hudPinned: ctx.sessionHudPinned === true,
+      acknowledgedCompletionIds: [...acknowledgedCompletionIds],
     });
+  }
+
+  function reconcileAcknowledgedCompletions(snapshot) {
+    const sessions = Array.isArray(snapshot && snapshot.sessions) ? snapshot.sessions : [];
+    const doneIds = new Set(
+      sessions.filter((session) => session && session.badge === "done").map((session) => session.id)
+    );
+    for (const sessionId of acknowledgedCompletionIds) {
+      if (!doneIds.has(sessionId)) acknowledgedCompletionIds.delete(sessionId);
+    }
+  }
+
+  function acknowledgeCompletion(sessionId) {
+    const id = typeof sessionId === "string" ? sessionId : "";
+    if (!id) return false;
+    const snapshot = latestSnapshot || getCurrentSnapshot();
+    const sessions = Array.isArray(snapshot && snapshot.sessions) ? snapshot.sessions : [];
+    const target = sessions.find((session) => session && session.id === id);
+    if (!target || target.badge !== "done") return false;
+
+    acknowledgedCompletionIds.add(id);
+    sendSnapshot(snapshot);
+    return true;
   }
 
   function sendI18n() {
@@ -940,6 +965,7 @@ module.exports = function initSessionHud(ctx) {
 
   function syncSessionHud(snapshot = latestSnapshot || getCurrentSnapshot(), options = {}) {
     latestSnapshot = snapshot;
+    reconcileAcknowledgedCompletions(snapshot);
     // Defend against stale reveal: if base eligibility dropped (last session
     // ended AND quota went away), clear any leftover clickRevealed so a future
     // new session does not pop the UI without a fresh user click.
@@ -1036,6 +1062,7 @@ module.exports = function initSessionHud(ctx) {
     repositionQuotaRing,
     syncSessionHud,
     sendI18n,
+    acknowledgeCompletion,
     getHudReservedOffset,
     cleanup,
     getWindow: () => hudWindow,

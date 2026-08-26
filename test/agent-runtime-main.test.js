@@ -1104,4 +1104,33 @@ describe("agent-runtime-main", () => {
     assert.strictEqual(runtime.getCodexOfficialActivitySnapshot("local-session"), null);
     assert.deepStrictEqual(clearCalls, [["codex"]]);
   });
+
+  it("wires Grok prompt ids through the runtime fence before lifecycle mutation", () => {
+    const updates = [];
+    const runtime = createAgentRuntimeMain({
+      codexSubagentClassifier: {},
+      updateSession: (...args) => updates.push(args),
+    });
+    const grok = (state, event, promptId = null, extra = {}) => runtime.updateSessionFromServer(
+      "grok:s1",
+      state,
+      event,
+      {
+        agentId: "grok",
+        hookSource: "grok-native",
+        grokPromptId: promptId,
+        ...extra,
+      },
+    );
+
+    assert.notStrictEqual(grok("thinking", "UserPromptSubmit", "A"), false);
+    assert.notStrictEqual(grok("thinking", "UserPromptSubmit", "B"), false);
+    assert.strictEqual(grok("attention", "StopCancelled", "A"), false);
+    assert.notStrictEqual(grok("attention", "Stop", "B"), false);
+    assert.deepStrictEqual(updates.map((call) => call[2]), [
+      "UserPromptSubmit",
+      "UserPromptSubmit",
+      "Stop",
+    ]);
+  });
 });

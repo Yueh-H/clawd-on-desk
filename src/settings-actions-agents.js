@@ -48,6 +48,7 @@ const AUTO_REPAIRABLE_AGENT_IDS = new Set([
   "reasonix",
   "qoderwork",
   "qwenwork",
+  "grok",
 ]);
 
 const INSTALLABLE_AGENT_IDS = new Set([
@@ -74,6 +75,7 @@ const INSTALLABLE_AGENT_IDS = new Set([
   "reasonix",
   "qoderwork",
   "qwenwork",
+  "grok",
 ]);
 const SETTABLE_AGENT_FLAGS = AGENT_FLAGS.filter((flag) => flag !== "integrationInstalled");
 const CUSTOM_DISCOVERY_AGENT_IDS = new Set([...INSTALLABLE_AGENT_IDS, "custom"]);

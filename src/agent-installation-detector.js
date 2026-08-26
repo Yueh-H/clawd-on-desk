@@ -426,6 +426,7 @@ function detectInstallation(descriptor, paths, options) {
     case "qoder":
     case "qoderwork":
     case "qwenwork":
+    case "grok":
       if (dirExists(fsImpl, paths.parentDir)) return installationResult(true, "high", "parent-dir", `${paths.parentDir} exists`);
       return notFound();
     case "reasonix":

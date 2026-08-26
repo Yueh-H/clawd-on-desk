@@ -63,6 +63,15 @@ const SOURCE_PROVENANCE = Object.freeze({
   "copilot-cli": lobeSource("githubcopilot.png", { contrastTreatment: "neutral-light-tile" }),
   "cursor-agent": lobeSource("cursor.png", { contrastTreatment: "neutral-light-tile" }),
   "gemini-cli": lobeSource("geminicli-color.png"),
+  grok: {
+    originalFilename: "grok.svg",
+    fallback: false,
+    upstreamPackage: "@lobehub/icons-static-svg",
+    upstreamVersion: "1.94.0",
+    license: "MIT",
+    variant: "light",
+    contrastTreatment: "neutral-light-tile",
+  },
   hermes: lobeSource("hermesagent.png", { contrastTreatment: "neutral-light-tile" }),
   "kimi-cli": {
     originalFilename: "kimi-cli.png",

@@ -1,9 +1,10 @@
 // opencode-family shared core — factory isolation, prefix matrix, and
 // registry↔entry cross-checks (see docs/project/agent-runtime-architecture.md).
 
-const { describe, it } = require("node:test");
+const { after, before, describe, it } = require("node:test");
 const assert = require("node:assert");
 const fs = require("fs");
+const os = require("node:os");
 const path = require("path");
 const { pathToFileURL } = require("node:url");
 
@@ -18,6 +19,45 @@ const {
 const { NESTED_TERMINAL_ENV } = require("../hooks/shared-process");
 
 const HOOKS_DIR = path.join(__dirname, "..", "hooks");
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "clawd-family-core-"));
+const ORIGINAL_HOME = process.env.HOME;
+const ORIGINAL_USERPROFILE = process.env.USERPROFILE;
+const ORIGINAL_FETCH = globalThis.fetch;
+let interceptedClawdPosts = 0;
+
+before(() => {
+  process.env.HOME = TEST_HOME;
+  process.env.USERPROFILE = TEST_HOME;
+  // cleanupSessionDirectory intentionally emits a final SessionEnd. Keep that
+  // production behavior under test without ever probing a developer's live
+  // Clawd server on 127.0.0.1:23333-23337.
+  globalThis.fetch = async () => {
+    interceptedClawdPosts += 1;
+    return {
+      status: 200,
+      headers: {
+        get(name) {
+          const header = String(name || "").toLowerCase();
+          if (header === "x-clawd-server") return "clawd-on-desk";
+          if (header === "x-clawd-metadata-accepted") return "1";
+          return null;
+        },
+      },
+      text: async () => "ok",
+    };
+  };
+});
+
+after(async () => {
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(interceptedClawdPosts > 0, "fixture SessionEnd must stay on the test fetch stub");
+  globalThis.fetch = ORIGINAL_FETCH;
+  if (ORIGINAL_HOME === undefined) delete process.env.HOME;
+  else process.env.HOME = ORIGINAL_HOME;
+  if (ORIGINAL_USERPROFILE === undefined) delete process.env.USERPROFILE;
+  else process.env.USERPROFILE = ORIGINAL_USERPROFILE;
+  fs.rmSync(TEST_HOME, { recursive: true, force: true });
+});
 
 async function loadCore() {
   const modulePath = path.join(HOOKS_DIR, "opencode-family-plugin", "core.mjs");
@@ -251,7 +291,9 @@ describe("opencode-family plugin factory", () => {
       { type: "server.instance.disposed", properties: {} },
       "before-send"
     );
+    await Promise.all([...plugin.__test._statePostTailBySession.values()]);
     assert.strictEqual(plugin.__test._sessionDirectoryById.size, 0);
+    assert.strictEqual(plugin.__test._statePostTailBySession.size, 0);
   });
 });
 

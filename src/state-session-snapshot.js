@@ -3,6 +3,7 @@
 const path = require("path");
 const { sessionAliasKey } = require("./session-alias");
 const { getSessionFocusTarget } = require("./session-focus");
+const { getRetainedSessionResumeTarget } = require("./retained-session-resume");
 const {
   buildLatestLocalCodexProcessIds,
   isSupersededLocalCodexProcessSession,
@@ -110,6 +111,26 @@ function normalizeTitle(value) {
 function sessionUpdatedAt(session) {
   const updatedAt = Number(session && session.updatedAt);
   return Number.isFinite(updatedAt) ? updatedAt : 0;
+}
+
+// Codex Desktop launches app-internal background workers with
+// originator="codex_exec" and source="exec". They share the user's cwd but,
+// unlike a terminal-launched `codex exec`, have no terminal PID or deep-link
+// target. Keep only that unfocusable shape out of the shared session
+// navigation snapshot: a terminal `codex exec` with sourcePid remains visible.
+function shouldHideUnfocusableCodexExecFromNavigation(id, session, options = {}) {
+  if (!session || session.agentId !== "codex") return false;
+  const originator = typeof session.codexOriginator === "string"
+    ? session.codexOriginator.trim().toLowerCase()
+    : "";
+  const source = typeof session.codexSource === "string"
+    ? session.codexSource.trim().toLowerCase()
+    : "";
+  if (originator !== "codex_exec" || source !== "exec") return false;
+
+  return getSessionFocusTarget({ ...session, id }, {
+    osPlatform: options.focusHostPlatform || options.osPlatform,
+  }).canFocus !== true;
 }
 
 // A persisted session counts as "in progress" when it is non-headless and its
@@ -325,6 +346,11 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
       osPlatform: options.focusHostPlatform || options.osPlatform,
     })
     : { canFocus: false, type: null, url: null };
+  const resumeTarget = manualRetained && !session.headless && state !== "sleeping" && !hiddenFromHud
+    ? getRetainedSessionResumeTarget({ ...(session || {}), id }, {
+      osPlatform: options.focusHostPlatform || options.osPlatform,
+    })
+    : { canResume: false, type: null };
   const source = deriveSourceInfo(session && session.host);
   const automationRecord = options.sessionAutomationRecord || null;
   const automationIdentity = session && session.sessionAutomationIdentity;
@@ -367,6 +393,7 @@ function buildSessionSnapshotEntry(id, session, sessionAliases = {}, options = {
     orcaPaneKey: (session && session.orcaPaneKey) || null,
     canFocus: focusTarget.canFocus === true,
     focusTarget: focusTarget.type ? { type: focusTarget.type, url: focusTarget.url || null } : null,
+    canResume: resumeTarget.canResume === true,
     host: (session && session.host) || null,
     wslDistro: (session && session.wslDistro) || null,
     sourceType: source.sourceType,
@@ -450,6 +477,7 @@ function buildSessionSnapshot(sessions, options = {}) {
           `${session && session.agentId ? session.agentId : ""}\u0000${id}`
         ) || null);
     if (automationRecord) matchedAutomationGrantIds.add(automationRecord.grantId);
+    if (shouldHideUnfocusableCodexExecFromNavigation(id, session, options)) continue;
     entries.push(buildSessionSnapshotEntry(id, session, sessionAliases, {
       ...options,
       latestLocalCodexProcessIds,
@@ -600,6 +628,7 @@ function sessionSnapshotSignature(snapshot) {
       wtHwnd: entry.wtHwnd,
       canFocus: entry.canFocus,
       focusTarget: entry.focusTarget,
+      canResume: entry.canResume,
       headless: entry.headless,
       hiddenFromHud: !!entry.hiddenFromHud,
       host: entry.host,
@@ -636,6 +665,7 @@ module.exports = {
   isSessionInProgress,
   deriveSessionBadge,
   shouldAutoClearDetachedSession,
+  shouldHideUnfocusableCodexExecFromNavigation,
   getSessionAliasEntry,
   getEffectiveSessionTitle,
   sessionDisplayTitle,

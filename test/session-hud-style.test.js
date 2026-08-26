@@ -6,6 +6,7 @@ const path = require("node:path");
 const sessionHudHtml = fs.readFileSync(path.join(__dirname, "..", "src", "session-hud.html"), "utf8");
 const sessionHudRenderer = fs.readFileSync(path.join(__dirname, "..", "src", "session-hud-renderer.js"), "utf8");
 const sessionHudPreload = fs.readFileSync(path.join(__dirname, "..", "src", "preload-session-hud.js"), "utf8");
+const mainSource = fs.readFileSync(path.join(__dirname, "..", "src", "main.js"), "utf8");
 const quotaRingHtml = fs.readFileSync(path.join(__dirname, "..", "src", "quota-ring.html"), "utf8");
 const quotaRingRenderer = fs.readFileSync(path.join(__dirname, "..", "src", "quota-ring-renderer.js"), "utf8");
 
@@ -204,11 +205,27 @@ describe("session HUD visual shell", () => {
     assert.match(sessionHudPreload, /session-hud:delete-session/);
   });
 
+  it("offers an explicit reconnect action for resumable historical rows", () => {
+    assert.match(sessionHudHtml, /\.resume-session-button\s*\{/);
+    assert.match(sessionHudRenderer, /session\.canResume\s*===\s*true/);
+    assert.match(sessionHudRenderer, /const canNavigate = canFocus \|\| canResume/);
+    assert.match(sessionHudRenderer, /else if \(canResume\)\s*\{\s*await resumeAndOpenSession\(session\.id\)/);
+    assert.match(sessionHudRenderer, /resumeSession\(sessionId\)/);
+    assert.match(sessionHudPreload, /session-hud:resume-session/);
+  });
+
   it("shows the resolved agent name in each compact row", () => {
     assert.match(sessionHudHtml, /\.agent-name\s*\{[\s\S]*max-width:\s*96px;[\s\S]*text-overflow:\s*ellipsis;[\s\S]*\}/);
     assert.match(sessionHudRenderer, /function agentLabelFor\(session\)/);
     assert.match(sessionHudRenderer, /agentName\.className = "agent-name"/);
     assert.match(sessionHudRenderer, /agentName\.textContent = agentLabel/);
+  });
+
+  it("numbers visible session rows before the status dot", () => {
+    assert.match(sessionHudHtml, /\.row-index\s*\{[\s\S]*width:\s*14px;[\s\S]*text-align:\s*right;[\s\S]*font-variant-numeric:\s*tabular-nums;[\s\S]*\}/);
+    assert.match(sessionHudRenderer, /function createRowForSession\(session, now, rowNumber\)/);
+    assert.match(sessionHudRenderer, /index\.className = "row-index"/);
+    assert.match(sessionHudRenderer, /createRowForSession\(session, now, index \+ 1\)/);
   });
 
   it("renders transient feedback inline instead of covering fixed-height rows", () => {
@@ -236,6 +253,17 @@ describe("session HUD visual shell", () => {
     assert.doesNotMatch(sessionHudRenderer, /sessionCarrying/);
   });
 
+  it("focuses or resumes the indexed session before acknowledging the shortcut", () => {
+    assert.match(mainSource, /if \(target\.canResume === true\)/);
+    assert.match(mainSource, /return resumeDashboardSession\(target\.id\)\.then/);
+    assert.match(mainSource, /const resumed = !!\(result && result\.status === "ok"\)/);
+    assert.match(mainSource, /if \(resumed\) acknowledgeSessionCompletion\(target\.id\)/);
+    assert.match(mainSource, /openClaudeDesktopSession:\s*async \(url\)[\s\S]{0,180}shell\.openExternal\(url\)/);
+    assert.match(mainSource, /const focused = focusDashboardSession\(target\.id, \{ requestSource: "shortcut" \}\)/);
+    assert.match(mainSource, /if \(focused\) acknowledgeSessionCompletion\(target\.id\)/);
+    assert.match(sessionHudRenderer, /snapshot\.acknowledgedCompletionIds/);
+  });
+
   it("marks startup-restored live sessions without using a completion chip", () => {
     assert.match(sessionHudHtml, /\.chip-recovered\s*\{/);
     assert.match(sessionHudRenderer, /session\.startupRecovered/);
@@ -247,7 +275,7 @@ describe("session HUD visual shell", () => {
     assert.match(sessionHudRenderer, /HUD_TITLE_MAX_UNITS\s*=\s*32/);
     assert.match(sessionHudRenderer, /function shortenHudTitle\(value\)/);
     assert.match(sessionHudRenderer, /title\.textContent = feedbackText \|\| shortTitle/);
-    assert.match(sessionHudRenderer, /title\.title = canFocus/);
+    assert.match(sessionHudRenderer, /title\.title = canNavigate/);
   });
 
   it("updates elapsed labels without rebuilding animated rows every second", () => {

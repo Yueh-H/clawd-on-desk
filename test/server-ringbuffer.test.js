@@ -510,3 +510,43 @@ describe("server hook event ringbuffer", () => {
     )));
   });
 });
+
+describe("server indexed focus route", () => {
+  it("waits for an asynchronous retained-session resume result", async () => {
+    let resolveFocus;
+    const calls = [];
+    const focusResult = new Promise((resolve) => { resolveFocus = resolve; });
+    const { handler } = startServer({
+      focusSessionByIndex: (index) => {
+        calls.push(index);
+        return focusResult;
+      },
+    });
+
+    let settled = false;
+    const responsePromise = callHandler(handler, "GET", "/focus?index=4")
+      .then((response) => {
+        settled = true;
+        return response;
+      });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepStrictEqual(calls, [4]);
+    assert.strictEqual(settled, false, "the HTTP response must reflect the resume result");
+
+    resolveFocus(true);
+    const response = await responsePromise;
+    assert.strictEqual(response.statusCode, 200);
+    assert.deepStrictEqual(JSON.parse(response.body), { ok: true, index: 4 });
+  });
+
+  it("returns ok:false when asynchronous session activation fails", async () => {
+    const { handler } = startServer({
+      focusSessionByIndex: async () => { throw new Error("resume failed"); },
+    });
+
+    const response = await callHandler(handler, "GET", "/focus?index=2");
+    assert.strictEqual(response.statusCode, 200);
+    assert.deepStrictEqual(JSON.parse(response.body), { ok: false, index: 2 });
+  });
+});

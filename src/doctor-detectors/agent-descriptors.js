@@ -27,6 +27,7 @@ const qoderwork = require("../../hooks/qoderwork-install");
 const qwenwork = require("../../hooks/qwenwork-install");
 const workbuddy = require("../../hooks/workbuddy-install");
 const dsh = require("../../hooks/dsh-install");
+const grok = require("../../hooks/grok-install");
 
 function agentName(agentId) {
   const agent = getAgent(agentId);
@@ -367,6 +368,18 @@ const AGENT_DESCRIPTORS = Object.freeze([
     nested: true,
     hookEvents: qwenwork.QWENWORK_HOOK_EVENTS,
     hookGroupId: "clawd",
+  }),
+  Object.freeze({
+    agentId: "grok",
+    agentName: agentName("grok"),
+    eventSource: agentEventSource("grok"),
+    parentDir: grok.DEFAULT_PARENT_DIR,
+    configPath: grok.DEFAULT_CONFIG_PATH,
+    configMode: "file",
+    autoInstall: true,
+    marker: grok.MARKER,
+    nested: true,
+    hookEvents: grok.GROK_HOOK_EVENTS,
   }),
   Object.freeze({
     agentId: "deepseek-harness",

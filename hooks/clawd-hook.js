@@ -57,6 +57,22 @@ function resolveReportingAgentId(payload) {
   return isCursorCompatibilityHook ? "cursor-agent" : "claude-code";
 }
 
+// Grok scans Claude Code hook settings for compatibility and supplies these
+// reserved environment variables to imported hooks. Its stdin schema is
+// camelCase, so treating that invocation as Claude collapses every Grok session
+// into claude-code/default. The native Grok hook is authoritative; this copy
+// must be a fast, fail-open no-op to avoid duplicate rows and duplicate Stop
+// notifications.
+function isGrokCompatibilityInvocation(env = process.env) {
+  return !!(
+    env
+    && (
+      (typeof env.GROK_SESSION_ID === "string" && env.GROK_SESSION_ID.trim())
+      || (typeof env.GROK_HOOK_EVENT === "string" && env.GROK_HOOK_EVENT.trim())
+    )
+  );
+}
+
 function normalizeTitle(value) {
   if (typeof value !== "string") return null;
   const collapsed = value
@@ -765,6 +781,10 @@ function attachStdinDiag(body, stdinRead) {
 }
 
 function main() {
+  if (isGrokCompatibilityInvocation()) {
+    process.stdout.write("{}\n");
+    return;
+  }
   const event = process.argv[2];
   if (!EVENT_TO_STATE[event]) process.exit(0);
   const eventAt = Date.now();
@@ -829,4 +849,5 @@ module.exports = {
   extractApiErrorFromEntries,
   extractLastAssistantTextFromEntries,
   readTranscriptTailEntries,
+  isGrokCompatibilityInvocation,
 };

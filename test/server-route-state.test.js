@@ -190,6 +190,26 @@ describe("server-route-state health", () => {
 });
 
 describe("server-route-state POST", () => {
+  it("forwards bounded Grok turn-order metadata to the runtime", async () => {
+    const res = await callStatePost(JSON.stringify({
+      agent_id: "grok",
+      hook_source: "grok-native",
+      session_id: "grok:s1",
+      event: "Notification",
+      state: "attention",
+      grok_prompt_id: "prompt-123",
+      grok_notification_type: "idle_prompt",
+    }));
+
+    assert.strictEqual(res.statusCode, 200);
+    assert.strictEqual(res.calls.updateSession.length, 1);
+    const opts = res.calls.updateSession[0][3];
+    assert.strictEqual(opts.agentId, "grok");
+    assert.strictEqual(opts.hookSource, "grok-native");
+    assert.strictEqual(opts.grokPromptId, "prompt-123");
+    assert.strictEqual(opts.grokNotificationType, "idle_prompt");
+  });
+
   it("enforces DSH upstream sequence order across created, event, and disposed callbacks", async () => {
     const fence = createDshStateSequenceFence();
     const post = (event, state, sequence = {}) => callStatePost(JSON.stringify({

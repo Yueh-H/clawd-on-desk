@@ -569,6 +569,21 @@ function createIntegrationSyncRuntime(options = {}) {
     }
   }
 
+  function syncGrokHooks() {
+    try {
+      if (typeof ctx.syncGrokHooksImpl === "function") return ctx.syncGrokHooksImpl();
+      const { registerGrokHooks } = require("../hooks/grok-install.js");
+      const result = registerGrokHooks({ silent: true });
+      if (hasPositiveCount(result.added) || hasPositiveCount(result.updated)) {
+        console.log(`Clawd: synced Grok hooks (added ${result.added}, updated ${result.updated})`);
+      }
+      return normalizeInstalledFlagResult(result, "Grok CLI", "grok-not-installed");
+    } catch (err) {
+      console.warn("Clawd: failed to sync Grok hooks:", err.message);
+      return { status: "error", message: err && err.message ? err.message : "Failed to sync Grok hooks" };
+    }
+  }
+
   const AGENT_INTEGRATION_SYNCERS = Object.freeze({
     "gemini-cli": syncGeminiHooks,
     "antigravity-cli": syncAntigravityHooks,
@@ -592,6 +607,7 @@ function createIntegrationSyncRuntime(options = {}) {
     reasonix: syncReasonixHooks,
     qoderwork: syncQoderWorkHooks,
     qwenwork: syncQwenWorkHooks,
+    grok: syncGrokHooks,
   });
 
   const AGENT_INTEGRATION_REPAIRERS = Object.freeze({
@@ -741,6 +757,7 @@ function createIntegrationSyncRuntime(options = {}) {
     syncQoderHooks,
     syncReasonixHooks,
     syncQoderWorkHooks,
+    syncGrokHooks,
     repairCodexHooks,
     repairOpenClawPlugin,
     syncIntegrationForAgent,

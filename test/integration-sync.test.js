@@ -86,6 +86,7 @@ function makeRuntime(overrides = {}) {
     syncReasonixHooksImpl: () => calls.push({ name: "reasonix" }),
     syncQoderWorkHooksImpl: () => calls.push({ name: "qoderwork" }),
     syncQwenWorkHooksImpl: () => calls.push({ name: "qwenwork" }),
+    syncGrokHooksImpl: () => calls.push({ name: "grok" }),
     ...ctxOverrides,
   }, calls);
   const runtime = createIntegrationSyncRuntime({
@@ -293,6 +294,7 @@ describe("integration sync runtime", () => {
       "reasonix",
       "qoderwork",
       "qwenwork",
+      "grok",
     ]);
   });
 
@@ -326,6 +328,7 @@ describe("integration sync runtime", () => {
       "reasonix",
       "qoderwork",
       "qwenwork",
+      "grok",
     ]);
   });
 

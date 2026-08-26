@@ -1,6 +1,7 @@
 "use strict";
 
 const { isCodexDesktopOriginator } = require("../hooks/codex-originator");
+const { getAntigravityConversationId } = require("./antigravity-session-focus");
 const { parseSessionKey } = require("./session-key");
 
 const CODEX_THREAD_SESSION_ID_RE = /^codex:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
@@ -61,6 +62,10 @@ function getSessionFocusTarget(entry, options = {}) {
         : { canFocus: false, type: null, url: null };
     }
     return { canFocus: true, type: "codex-thread", url: codexThreadUrl };
+  }
+
+  if (normalizeOsPlatform(options) === "darwin" && getAntigravityConversationId(entry)) {
+    return { canFocus: true, type: "antigravity-session", url: null };
   }
 
   if (entry.sourcePid) {

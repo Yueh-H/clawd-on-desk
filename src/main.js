@@ -115,6 +115,7 @@ const { registerPetInteractionIpc } = require("./pet-interaction-ipc");
 const { createSystemWakeRecovery } = require("./system-wake-recovery");
 const { formatLocalTimestamp } = require("./log-timestamp");
 const { launchClaudeSession, openTerminalAt } = require("./launch-claude");
+const { resumeRetainedSession } = require("./retained-session-resume");
 const { dialog: electronDialog } = require("electron");
 const initPermission = require("./permission");
 const { isPassiveNotifyEntry } = require("./passive-notify-entry");
@@ -175,6 +176,10 @@ const {
   createClaudeDesktopSessionResolver,
   focusClaudeDesktopSessionTarget,
 } = require("./claude-desktop-session-focus");
+const {
+  createAntigravitySessionNavigator,
+  focusAntigravitySessionTarget,
+} = require("./antigravity-session-focus");
 const { isSessionInProgress } = require("./state-session-snapshot");
 const { restoreSessionsFromRecoveryLeases } = require("./session-recovery-loader");
 const { getAllAgents, getAgent } = require("../agents/registry");
@@ -1526,6 +1531,7 @@ let repositionQuotaRing = () => {};
 let syncSessionHudVisibility = () => {};
 let broadcastSessionHudSnapshot = () => {};
 let sendSessionHudI18n = () => {};
+let acknowledgeSessionHudCompletion = () => false;
 let getSessionHudReservedOffset = () => 0;
 let getSessionHudWindow = () => null;
 let getQuotaRingWindow = () => null;
@@ -2130,6 +2136,9 @@ const {
 const resolveClaudeDesktopSession = createClaudeDesktopSessionResolver({
   platform: process.platform,
 });
+const navigateAntigravityConversation = createAntigravitySessionNavigator({
+  platform: process.platform,
+});
 
 function getFocusableLocalHudSessionIds() {
   if (!_state || typeof _state.buildSessionSnapshot !== "function") return [];
@@ -2169,6 +2178,18 @@ function focusDashboardSession(sessionId, options = {}) {
 
   const focusEntry = { ...(session || {}), ...(fallbackEntry || {}), id };
   const focusTarget = getSessionFocusTarget(focusEntry, { osPlatform: process.platform });
+  if (focusTarget.canFocus && focusTarget.type === "antigravity-session") {
+    const antigravityHandoff = focusAntigravitySessionTarget({
+      focusEntry,
+      sessionId: id,
+      requestSource,
+      navigateAntigravityConversation,
+      focusLog,
+      focusTerminalSession,
+    });
+    if (antigravityHandoff) return true;
+    return focusTerminalSession(focusEntry, id, requestSource);
+  }
   if (focusTarget.canFocus && focusTarget.type === "terminal") {
     const claudeDesktopHandoff = focusClaudeDesktopSessionTarget({
       shell,
@@ -2206,6 +2227,18 @@ function focusDashboardSession(sessionId, options = {}) {
   return false;
 }
 
+function acknowledgeSessionCompletion(sessionId) {
+  const id = typeof sessionId === "string" ? sessionId : "";
+  if (!id) return false;
+  const stateAcknowledged = !!(
+    _state
+    && typeof _state.ackSessionCompletion === "function"
+    && _state.ackSessionCompletion(id)
+  );
+  const hudAcknowledged = acknowledgeSessionHudCompletion(id) === true;
+  return stateAcknowledged || hudAcknowledged;
+}
+
 function focusSessionByIndex(index) {
   if (!_state || typeof _state.buildSessionSnapshot !== "function") return false;
   const snapshot = _state.buildSessionSnapshot();
@@ -2223,7 +2256,64 @@ function focusSessionByIndex(index) {
   );
   const target = visible[index];
   if (!target || !target.id) return false;
-  return focusDashboardSession(target.id, { requestSource: "shortcut" });
+
+  if (target.canResume === true) {
+    focusLog(`focus request source=shortcut branch=resume sid=${target.id}`);
+    return resumeDashboardSession(target.id).then((result) => {
+      const resumed = !!(result && result.status === "ok");
+      focusLog(
+        `focus result branch=resume source=shortcut sid=${target.id} `
+        + `status=${resumed ? "ok" : ((result && result.reason) || "failed")}`
+      );
+      if (resumed) acknowledgeSessionCompletion(target.id);
+      return resumed;
+    }).catch((err) => {
+      focusLog(
+        `focus result branch=resume source=shortcut sid=${target.id} `
+        + `status=error message=${err && err.message ? err.message : String(err)}`
+      );
+      return false;
+    });
+  }
+
+  const focused = focusDashboardSession(target.id, { requestSource: "shortcut" });
+  if (focused) acknowledgeSessionCompletion(target.id);
+  return focused;
+}
+
+// Read-only list for the local HTTP API (GET /sessions). Must mirror
+// focusSessionByIndex's ordering + visibility exactly, so external tools
+// (e.g. KeySilk harvest keys) can map "Key N" to the session ⌥N would focus.
+// transcriptPath comes from the raw session record — the HUD snapshot entry
+// deliberately omits it.
+function listVisibleSessions() {
+  if (!_state || typeof _state.buildSessionSnapshot !== "function") return [];
+  const snapshot = _state.buildSessionSnapshot();
+  const sessionsList = Array.isArray(snapshot.sessions) ? snapshot.sessions : [];
+  if (sessionsList.length === 0) return [];
+  const byId = new Map(sessionsList.map((s) => [s.id, s]));
+  const orderedIds = Array.isArray(snapshot.orderedIds)
+    ? snapshot.orderedIds
+    : sessionsList.map((s) => s.id);
+  const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+  const orderedSet = new Set(ordered.map((s) => s.id));
+  const missing = sessionsList.filter((s) => !orderedSet.has(s.id));
+  const raw = (_state.sessions && typeof _state.sessions.get === "function") ? _state.sessions : null;
+  return ordered.concat(missing)
+    .filter((s) => s && !s.headless && s.state !== "sleeping" && !s.hiddenFromHud)
+    .map((entry, i) => {
+      const record = raw ? raw.get(entry.id) : null;
+      return {
+        index: i + 1,
+        id: entry.id,
+        rawSessionId: entry.rawSessionId || null,
+        agentId: entry.agentId || null,
+        state: entry.state || null,
+        title: entry.sessionTitle || entry.displayTitle || null,
+        cwd: entry.cwd || null,
+        transcriptPath: (record && record.transcriptPath) || null,
+      };
+    });
 }
 
 function hideDashboardSession(sessionId) {
@@ -2234,6 +2324,41 @@ function hideDashboardSession(sessionId) {
   return removed
     ? { status: "ok" }
     : { status: "not-found" };
+}
+
+async function resumeDashboardSession(sessionId) {
+  const id = typeof sessionId === "string" ? sessionId : "";
+  if (!id || !_state || typeof _state.buildSessionSnapshot !== "function") {
+    return { status: "error", reason: "session-state-unavailable" };
+  }
+  const snapshot = _state.buildSessionSnapshot();
+  const entry = Array.isArray(snapshot && snapshot.sessions)
+    ? snapshot.sessions.find((session) => session && session.id === id)
+    : null;
+  if (!entry || entry.manualRetained !== true) {
+    return { status: "unavailable", reason: "retained-session-not-found" };
+  }
+
+  return resumeRetainedSession(entry, {
+    osPlatform: process.platform,
+    navigateAntigravityConversation,
+    openCodexThread: async (url) => {
+      try {
+        await shell.openExternal(url);
+        return true;
+      } catch (_err) {
+        return false;
+      }
+    },
+    openClaudeDesktopSession: async (url) => {
+      try {
+        await shell.openExternal(url);
+        return true;
+      } catch (_err) {
+        return false;
+      }
+    },
+  });
 }
 
 function showSessionHudContextMenu(event, sessionId) {
@@ -2440,6 +2565,7 @@ repositionQuotaRing = _sessionHud.repositionQuotaRing;
 syncSessionHudVisibility = _sessionHud.syncSessionHud;
 broadcastSessionHudSnapshot = _sessionHud.broadcastSessionSnapshot;
 sendSessionHudI18n = _sessionHud.sendI18n;
+acknowledgeSessionHudCompletion = _sessionHud.acknowledgeCompletion;
 getSessionHudReservedOffset = _sessionHud.getHudReservedOffset;
 getSessionHudWindow = _sessionHud.getWindow;
 getQuotaRingWindow = _sessionHud.getQuotaRingWindow;
@@ -2523,6 +2649,7 @@ const _serverCtx = {
   syncPermissionShortcuts,
   permLog,
   focusSessionByIndex: (index) => focusSessionByIndex(index),
+  listVisibleSessions: () => listVisibleSessions(),
   showDashboard: () => showDashboard(),
 };
 const _server = require("./server")(_serverCtx);
@@ -4251,10 +4378,11 @@ registerSessionIpc({
   getKimiQuotaStatus: () => _kimiQuotaRuntime.getStatus(),
   refreshKimiQuota: () => _kimiQuotaRuntime.refresh(),
   focusSession: (sessionId, options) => focusDashboardSession(sessionId, options),
+  resumeSession: (sessionId) => resumeDashboardSession(sessionId),
   hideSession: (sessionId) => hideDashboardSession(sessionId),
   showSessionHudMenu: (event, sessionId) => showSessionHudContextMenu(event, sessionId),
   openSessionFolder: (sessionId) => openDashboardSessionFolder(sessionId),
-  ackSessionCompletion: (sessionId) => _state.ackSessionCompletion(sessionId),
+  ackSessionCompletion: (sessionId) => acknowledgeSessionCompletion(sessionId),
   setSessionAlias: (payload) => _settingsController.applyCommand("setSessionAlias", payload),
   setSessionAutomationOverride: (payload, context) => {
     let warningParent = null;
@@ -4278,6 +4406,7 @@ registerSessionIpc({
       console.warn("Clawd: failed to pin Session HUD:", result.message);
     }
   },
+  getSessionHudWindow: () => getSessionHudWindow(),
   getLanWsServer: () => _lanWss,
 });
 
