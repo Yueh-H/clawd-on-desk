@@ -49,6 +49,16 @@ describe("parseAccelerator", () => {
       key: "C",
       accelerator: "CommandOrControl+Shift+Alt+C",
     });
+    assert.deepStrictEqual(parseAccelerator("Shift+Control+K"), {
+      modifiers: ["Control", "Shift"],
+      key: "K",
+      accelerator: "Control+Shift+K",
+    });
+    assert.deepStrictEqual(parseAccelerator("Control+CommandOrControl+K"), {
+      modifiers: ["CommandOrControl", "Control"],
+      key: "K",
+      accelerator: "CommandOrControl+Control+K",
+    });
   });
 
   it("accepts named keys and function keys", () => {
@@ -77,6 +87,8 @@ describe("dangerous accelerator blacklist", () => {
   it("flags reserved global shortcuts", () => {
     assert.ok(DANGEROUS_ACCELERATORS.has("CommandOrControl+C"));
     assert.ok(isDangerousAccelerator("CommandOrControl+S"));
+    assert.ok(isDangerousAccelerator("Control+C"));
+    assert.ok(isDangerousAccelerator("Control+S"));
     assert.ok(isDangerousAccelerator("Alt+F4"));
     assert.strictEqual(isDangerousAccelerator("CommandOrControl+Shift+Y"), false);
   });
@@ -122,6 +134,15 @@ describe("buildAcceleratorFromEvent", () => {
       { action: "pending", modifiers: ["CommandOrControl", "Shift"] }
     );
     assert.deepStrictEqual(
+      buildAcceleratorFromEvent({
+        key: "Control",
+        code: "ControlLeft",
+        ctrlKey: true,
+        shiftKey: true,
+      }, { isMac: true }),
+      { action: "pending", modifiers: ["Control", "Shift"] }
+    );
+    assert.deepStrictEqual(
       buildAcceleratorFromEvent({ key: "Alt", code: "AltLeft" }),
       { action: "pending", modifiers: [] }
     );
@@ -149,6 +170,10 @@ describe("buildAcceleratorFromEvent", () => {
       formatAcceleratorPartial(["CommandOrControl", "Alt"]),
       "Ctrl+Alt+…"
     );
+    assert.strictEqual(
+      formatAcceleratorPartial(["Control", "Shift"], { isMac: true }),
+      "⌃⇧…"
+    );
   });
 
   it("builds canonical accelerators from keyboard state", () => {
@@ -171,6 +196,24 @@ describe("buildAcceleratorFromEvent", () => {
       }, { isMac: true }),
       { action: "commit", accelerator: "CommandOrControl+Shift+Alt+C" }
     );
+    assert.deepStrictEqual(
+      buildAcceleratorFromEvent({
+        key: "k",
+        code: "KeyK",
+        ctrlKey: true,
+        shiftKey: true,
+      }, { isMac: true }),
+      { action: "commit", accelerator: "Control+Shift+K" }
+    );
+    assert.deepStrictEqual(
+      buildAcceleratorFromEvent({
+        key: "k",
+        code: "KeyK",
+        ctrlKey: true,
+        metaKey: true,
+      }, { isMac: true }),
+      { action: "commit", accelerator: "CommandOrControl+Control+K" }
+    );
   });
 });
 
@@ -192,10 +235,21 @@ describe("formatAcceleratorLabel", () => {
       formatAcceleratorLabel("Shift+ArrowUp", { isMac: true }),
       "⇧↑"
     );
+    assert.strictEqual(
+      formatAcceleratorLabel("Control+Shift+K", { isMac: true }),
+      "⌃⇧K"
+    );
   });
 });
 
 describe("normalizeShortcuts", () => {
+  it("preserves an explicit physical Control binding", () => {
+    assert.strictEqual(
+      normalizeShortcuts({ togglePet: "Control+Shift+K" }, getDefaultShortcuts()).togglePet,
+      "Control+Shift+K"
+    );
+  });
+
   it("fills missing keys from defaults and drops unknown keys", () => {
     assert.deepStrictEqual(
       normalizeShortcuts({ togglePet: "Ctrl+K", bogus: "Ctrl+J" }, getDefaultShortcuts()),

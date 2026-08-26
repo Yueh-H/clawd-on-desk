@@ -28,16 +28,18 @@
   });
 
   const SHORTCUT_ACTION_IDS = Object.freeze(Object.keys(SHORTCUT_ACTIONS));
-  const MODIFIER_ORDER = Object.freeze(["CommandOrControl", "Shift", "Alt"]);
+  const MODIFIER_ORDER = Object.freeze(["CommandOrControl", "Control", "Shift", "Alt"]);
   const MODIFIER_ALIASES = Object.freeze({
     cmdorctrl: "CommandOrControl",
     cmdorcontrol: "CommandOrControl",
     commandorcontrol: "CommandOrControl",
     commandorctrl: "CommandOrControl",
-    ctrl: "CommandOrControl",
-    control: "CommandOrControl",
     command: "CommandOrControl",
     cmd: "CommandOrControl",
+    // Keep the established shorthand portable while allowing Electron's
+    // explicit Control modifier to represent the physical ⌃ key on macOS.
+    ctrl: "CommandOrControl",
+    control: "Control",
     shift: "Shift",
     alt: "Alt",
     option: "Alt",
@@ -81,6 +83,15 @@
     "CommandOrControl+Q",
     "CommandOrControl+W",
     "CommandOrControl+R",
+    "Control+C",
+    "Control+V",
+    "Control+X",
+    "Control+Z",
+    "Control+A",
+    "Control+S",
+    "Control+Q",
+    "Control+W",
+    "Control+R",
     "Alt+F4",
     "F5",
   ]);
@@ -281,6 +292,7 @@
     const mods = [];
     if (isMac) {
       if (metaKey) mods.push("CommandOrControl");
+      if (ctrlKey) mods.push("Control");
     } else if (ctrlKey) {
       mods.push("CommandOrControl");
     }
@@ -304,6 +316,7 @@
     if (!Array.isArray(modifiers) || modifiers.length === 0) return "";
     const labels = modifiers.map((modifier) => {
       if (modifier === "CommandOrControl") return isMac ? "⌘" : "Ctrl";
+      if (modifier === "Control") return isMac ? "⌃" : "Ctrl";
       if (modifier === "Shift") return isMac ? "⇧" : "Shift";
       if (modifier === "Alt") return isMac ? "⌥" : "Alt";
       return modifier;
@@ -321,6 +334,7 @@
 
     const displayParts = parsed.modifiers.map((modifier) => {
       if (modifier === "CommandOrControl") return isMac ? "⌘" : "Ctrl";
+      if (modifier === "Control") return isMac ? "⌃" : "Ctrl";
       if (modifier === "Shift") return isMac ? "⇧" : "Shift";
       if (modifier === "Alt") return isMac ? "⌥" : "Alt";
       return modifier;
