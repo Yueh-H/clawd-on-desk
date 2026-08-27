@@ -793,9 +793,8 @@ function main() {
   const resolve = createPidResolver({
     agentNames: { win: new Set(["claude.exe"]), mac: new Set(["claude"]) },
     agentCmdlineCheck: (cmd) => cmd.includes("claude-code") || cmd.includes("@anthropic-ai"),
-    // #681: Claude is the only adapter that derives anything from the agent's
-    // command line, so it is the only one that passes this. The resolver applies
-    // it in memory and caches the boolean instead of the line.
+    // #681: derive this in memory and cache only the boolean, never the raw
+    // command line. Codex follows the same resolver contract for ephemeral exec.
     headlessCheck: isClaudeHeadlessCommandLine,
     platformConfig: config,
   });

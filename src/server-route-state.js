@@ -42,7 +42,7 @@ const { CODEX_QUOTA_FIELDS } = require("../hooks/codex-rate-limits");
 const { extractPermissionToolInput } = require("../hooks/kimi-hook");
 const { normalizeCodexUserInputWire } = require("../hooks/codex-user-input");
 const { sanitizeShadowRecord } = require("./windows-process-chain-shadow-log");
-const { isClaudeBashCodexWorkerSession } = require("./codex-background-worker");
+const { isBackgroundCodexWorkerSession } = require("./codex-background-worker");
 
 // /state POST body size cap. Raised 1024 → 4096 → 16384: a CJK
 // assistant_last_output (3 UTF-8 bytes/char) on a Stop completion blew past
@@ -356,7 +356,7 @@ function handleStatePost(req, res, options) {
       // "ignore + fall back" pattern used by cwd / agent_id above.
       const rawTitle = typeof data.session_title === "string" ? data.session_title.trim() : "";
       const sessionTitle = rawTitle || null;
-      const headless = reportedHeadless || isClaudeBashCodexWorkerSession({
+      const headless = reportedHeadless || isBackgroundCodexWorkerSession({
         agentId,
         cwd,
         host,

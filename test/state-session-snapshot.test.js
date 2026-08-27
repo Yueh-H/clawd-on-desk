@@ -258,6 +258,29 @@ describe("Codex exec session navigation", () => {
     });
     assert.deepStrictEqual(snapshot.sessions.map((entry) => entry.id), ["terminal", "desktop"]);
   });
+
+  it("hides legacy .isolated workers without hiding an interactive Codex CLI", () => {
+    const legacyWorker = session("idle", {
+      agentId: "codex",
+      codexSource: "startup",
+      cwd: "/Users/me/heptascan/.isolated",
+    });
+    const interactive = session("working", {
+      agentId: "codex",
+      codexOriginator: "codex-tui",
+      codexSource: "cli",
+      cwd: "/Users/me/heptascan/.isolated",
+    });
+
+    const snapshot = buildSessionSnapshot(new Map([
+      ["legacy-worker", legacyWorker],
+      ["interactive", interactive],
+    ]), {
+      statePriority: STATE_PRIORITY,
+      focusHostPlatform: "darwin",
+    });
+    assert.deepStrictEqual(snapshot.sessions.map((entry) => entry.id), ["interactive"]);
+  });
 });
 
 describe("remote profile action ids", () => {

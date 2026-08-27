@@ -681,6 +681,31 @@ describe("server-route-state POST", () => {
     assert.strictEqual(terminal.calls.updateSession[0][3].headless, false);
   });
 
+  it("marks legacy .isolated Codex workers headless but preserves an interactive CLI", async () => {
+    const worker = await callStatePost(JSON.stringify({
+      state: "working",
+      session_id: "codex:worker",
+      event: "PreToolUse",
+      agent_id: "codex",
+      cwd: "/Users/me/heptascan/.isolated",
+      codex_source: "startup",
+    }));
+    assert.strictEqual(worker.statusCode, 200);
+    assert.strictEqual(worker.calls.updateSession[0][3].headless, true);
+
+    const interactive = await callStatePost(JSON.stringify({
+      state: "working",
+      session_id: "codex:interactive",
+      event: "PreToolUse",
+      agent_id: "codex",
+      cwd: "/Users/me/heptascan/.isolated",
+      codex_originator: "codex-tui",
+      codex_source: "cli",
+    }));
+    assert.strictEqual(interactive.statusCode, 200);
+    assert.strictEqual(interactive.calls.updateSession[0][3].headless, false);
+  });
+
   it("shows and resolves a normalized remote Codex user-input request", async () => {
     const request = await callStatePost(JSON.stringify({
       state: "notification",

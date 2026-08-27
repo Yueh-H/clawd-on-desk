@@ -251,6 +251,15 @@ function shouldReportForegroundWtHwnd(event) {
   return event === "SessionStart" || event === "UserPromptSubmit";
 }
 
+// `codex exec --ephemeral` is a one-shot, non-interactive worker invocation.
+// It has no resumable session for the HUD to navigate to, so derive a boolean
+// from the live Codex argv and let shared-process persist only that boolean.
+function isCodexHeadlessCommandLine(cmdline) {
+  const value = typeof cmdline === "string" ? cmdline : "";
+  return /(?:^|\s)exec(?=\s|$)/i.test(value)
+    && /(?:^|\s)--ephemeral(?=\s|$)/i.test(value);
+}
+
 function applyLocalProcessFields(body, resolve, options = {}) {
   // #634: cross-process pid cache via the shared resolver. Lifecycle keys off
   // the state event (permission bodies carry no event → "event"); codex has no
@@ -600,6 +609,7 @@ async function runCodexHook(payload, options = {}) {
       || null;
     const resolverOptions = {
       agentNames: { win: new Set(["codex.exe"]), mac: new Set(["codex"]), linux: new Set(["codex"]) },
+      headlessCheck: isCodexHeadlessCommandLine,
       platformConfig: config,
       readRuntimeIdentity() {
         if (processChainAttempt && processChainAttempt.context) {
@@ -740,6 +750,7 @@ module.exports = {
   extractLastAssistantTextFromTranscript,
   extractCodexSessionIdFromTranscriptPath,
   isCodexDesktopSession,
+  isCodexHeadlessCommandLine,
   normalizeCodexSessionId,
   readFirstSessionMeta,
   runCodexHook,

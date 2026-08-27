@@ -176,3 +176,34 @@ test("manual retention rejects and prunes Claude Bash Codex workers", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("manual retention prunes legacy .isolated Codex workers", () => {
+  const { dir, persistPath } = makeTempStore();
+  try {
+    fs.writeFileSync(persistPath, `${JSON.stringify({
+      version: 1,
+      sessions: [
+        {
+          id: "ephemeral-worker",
+          rawSessionId: "codex:ephemeral-worker",
+          agentId: "codex",
+          cwd: "/Users/me/heptascan/.isolated",
+          codexSource: "startup",
+        },
+        {
+          id: "interactive-cli",
+          rawSessionId: "codex:interactive-cli",
+          agentId: "codex",
+          cwd: "/Users/me/heptascan/.isolated",
+          codexOriginator: "codex-tui",
+          codexSource: "cli",
+        },
+      ],
+    })}\n`);
+
+    const restored = createManualSessionRetentionStore({ persistPath });
+    assert.deepStrictEqual(restored.listRecords().map((entry) => entry.id), ["interactive-cli"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -551,8 +551,8 @@ function createPidResolver(options) {
   // #681: the ONE thing anything derived from the agent's command line. Owned by
   // the resolver now (rather than the adapter) because the resolver is what
   // writes the cache, and the cache must store the boolean instead of the line.
-  // Adapters that pass no headlessCheck simply never report headless — same as
-  // today, since only Claude ever did.
+  // Adapters that pass no headlessCheck simply never report headless. Claude
+  // uses this for print mode; Codex uses it for ephemeral exec workers.
   const headlessCheck = typeof options.headlessCheck === "function" ? options.headlessCheck : null;
   const deriveHeadless = (cmdline) => (headlessCheck ? headlessCheck(cmdline || "") === true : false);
 

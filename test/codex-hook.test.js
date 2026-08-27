@@ -14,6 +14,7 @@ const {
   buildToolInputFingerprint,
   extractLastAssistantTextFromTranscript,
   extractCodexSessionIdFromTranscriptPath,
+  isCodexHeadlessCommandLine,
   normalizeCodexSessionId,
   readFirstSessionMeta,
   runCodexHook,
@@ -64,6 +65,18 @@ describe("Codex official hook", () => {
     assert.strictEqual(normalizeCodexSessionId("abc"), "codex:abc");
     assert.strictEqual(normalizeCodexSessionId("codex:abc"), "codex:abc");
     assert.strictEqual(normalizeCodexSessionId(""), "codex:default");
+  });
+
+  it("classifies only ephemeral Codex exec invocations as headless", () => {
+    assert.strictEqual(isCodexHeadlessCommandLine(
+      '/Users/me/.local/bin/codex exec --ephemeral --skip-git-repo-check -C /repo/.isolated'
+    ), true);
+    assert.strictEqual(isCodexHeadlessCommandLine(
+      '"C:\\Program Files\\Codex\\codex.exe" exec --ephemeral -C C:\\repo'
+    ), true);
+    assert.strictEqual(isCodexHeadlessCommandLine("codex exec --json"), false);
+    assert.strictEqual(isCodexHeadlessCommandLine("codex --ephemeral"), false);
+    assert.strictEqual(isCodexHeadlessCommandLine("codex"), false);
   });
 
   it("prefers rollout transcript ids when normalizing session ids", () => {
@@ -603,6 +616,7 @@ describe("Codex official hook", () => {
         return { ok: true, reason: null, port: 23335, ownerPid: process.pid };
       },
       createPidResolver(resolverOptions) {
+        assert.strictEqual(resolverOptions.headlessCheck, isCodexHeadlessCommandLine);
         return () => {
           resolveCalls += 1;
           resolverOptions.readRuntimeIdentity();
