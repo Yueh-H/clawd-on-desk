@@ -9,6 +9,7 @@ const {
   isSupersededLocalCodexProcessSession,
 } = require("./state-session-dedupe");
 const { readCodexThreadName } = require("../hooks/codex-session-index");
+const { isClaudeBashCodexWorkerSession } = require("./codex-background-worker");
 
 // ── Session source derivation ────────────────────────────────────────
 
@@ -120,6 +121,7 @@ function sessionUpdatedAt(session) {
 // navigation snapshot: a terminal `codex exec` with sourcePid remains visible.
 function shouldHideUnfocusableCodexExecFromNavigation(id, session, options = {}) {
   if (!session || session.agentId !== "codex") return false;
+  if (isClaudeBashCodexWorkerSession(session)) return true;
   const originator = typeof session.codexOriginator === "string"
     ? session.codexOriginator.trim().toLowerCase()
     : "";

@@ -208,6 +208,56 @@ describe("Codex exec session navigation", () => {
     assert.strictEqual(snapshot.sessions[0].canFocus, true);
     assert.deepStrictEqual(snapshot.sessions[0].focusTarget, { type: "terminal", url: null });
   });
+
+  it("hides Claude Bash scratchpad workers even while their child PID is alive", () => {
+    const claudeBashWorker = session("working", {
+      agentId: "codex",
+      codexSource: "startup",
+      sourcePid: 4242,
+      cwd: "/private/tmp/claude-501/-Users-me-project/5e96c66f-13c0-49e6-959d-ee3bb7c64338/scratchpad/isolated",
+    });
+    const userTerminal = session("working", {
+      agentId: "codex",
+      codexSource: "startup",
+      sourcePid: 4343,
+      cwd: "/Users/me/projects/isolated",
+    });
+    const codexDesktop = session("working", {
+      agentId: "codex",
+      codexOriginator: "Codex Desktop",
+      codexSource: "vscode",
+      cwd: "/private/tmp/claude-501/-Users-me-project/5e96c66f-13c0-49e6-959d-ee3bb7c64338/scratchpad/isolated",
+    });
+
+    assert.strictEqual(
+      shouldHideUnfocusableCodexExecFromNavigation("claude-bash", claudeBashWorker, {
+        focusHostPlatform: "darwin",
+      }),
+      true
+    );
+    assert.strictEqual(
+      shouldHideUnfocusableCodexExecFromNavigation("terminal", userTerminal, {
+        focusHostPlatform: "darwin",
+      }),
+      false
+    );
+    assert.strictEqual(
+      shouldHideUnfocusableCodexExecFromNavigation("desktop", codexDesktop, {
+        focusHostPlatform: "darwin",
+      }),
+      false
+    );
+
+    const snapshot = buildSessionSnapshot(new Map([
+      ["claude-bash", claudeBashWorker],
+      ["terminal", userTerminal],
+      ["desktop", codexDesktop],
+    ]), {
+      statePriority: STATE_PRIORITY,
+      focusHostPlatform: "darwin",
+    });
+    assert.deepStrictEqual(snapshot.sessions.map((entry) => entry.id), ["terminal", "desktop"]);
+  });
 });
 
 describe("remote profile action ids", () => {

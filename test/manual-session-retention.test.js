@@ -135,3 +135,44 @@ test("manual retention does not add a new empty Claude detector row", () => {
   }), false);
   assert.deepStrictEqual(store.listRecords(), []);
 });
+
+test("manual retention rejects and prunes Claude Bash Codex workers", () => {
+  const { dir, persistPath } = makeTempStore();
+  const worker = {
+    id: "codex-worker",
+    rawSessionId: "codex:01a040ed-816e-7861-8202-9c0aa5416a37",
+    agentId: "codex",
+    cwd: "/private/tmp/claude-501/-Users-me-project/5e96c66f-13c0-49e6-959d-ee3bb7c64338/scratchpad/isolated",
+    codexOriginator: null,
+    codexSource: "startup",
+  };
+  try {
+    const fresh = createManualSessionRetentionStore({ persistPath });
+    assert.strictEqual(fresh.upsertSession(worker.id, worker), false);
+    assert.deepStrictEqual(fresh.listRecords(), []);
+
+    fs.writeFileSync(persistPath, `${JSON.stringify({
+      version: 1,
+      sessions: [
+        worker,
+        {
+          id: "terminal",
+          rawSessionId: "codex:terminal",
+          agentId: "codex",
+          cwd: "/Users/me/projects/isolated",
+          codexSource: "startup",
+        },
+      ],
+    })}\n`);
+
+    const restored = createManualSessionRetentionStore({ persistPath });
+    assert.deepStrictEqual(restored.listRecords().map((entry) => entry.id), ["terminal"]);
+    assert.strictEqual(restored.flush(), true);
+    assert.deepStrictEqual(
+      JSON.parse(fs.readFileSync(persistPath, "utf8")).sessions.map((entry) => entry.id),
+      ["terminal"]
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

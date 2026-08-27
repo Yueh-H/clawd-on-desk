@@ -656,6 +656,31 @@ describe("server-route-state POST", () => {
     ]]);
   });
 
+  it("marks Claude Bash scratchpad Codex workers headless without hiding normal terminal Codex", async () => {
+    const scratchpad = "/private/tmp/claude-501/-Users-me-project/5e96c66f-13c0-49e6-959d-ee3bb7c64338/scratchpad/isolated";
+    const worker = await callStatePost(JSON.stringify({
+      state: "working",
+      session_id: "codex:worker",
+      event: "PreToolUse",
+      agent_id: "codex",
+      cwd: scratchpad,
+      codex_source: "startup",
+    }));
+    assert.strictEqual(worker.statusCode, 200);
+    assert.strictEqual(worker.calls.updateSession[0][3].headless, true);
+
+    const terminal = await callStatePost(JSON.stringify({
+      state: "working",
+      session_id: "codex:terminal",
+      event: "PreToolUse",
+      agent_id: "codex",
+      cwd: "/Users/me/projects/isolated",
+      codex_source: "startup",
+    }));
+    assert.strictEqual(terminal.statusCode, 200);
+    assert.strictEqual(terminal.calls.updateSession[0][3].headless, false);
+  });
+
   it("shows and resolves a normalized remote Codex user-input request", async () => {
     const request = await callStatePost(JSON.stringify({
       state: "notification",

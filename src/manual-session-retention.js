@@ -10,6 +10,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { hasStoredClaudeSessionEvidence } = require("./claude-desktop-session");
+const { isClaudeBashCodexWorkerSession } = require("./codex-background-worker");
 
 const FILE_VERSION = 1;
 const DEFAULT_PERSIST_PATH = path.join(os.homedir(), ".clawd", "retained-sessions.json");
@@ -31,7 +32,12 @@ function nullableText(value, maxLength) {
 
 function sanitizeSession(id, session) {
   const sessionId = cleanText(id, 640);
-  if (!sessionId || !session || session.headless === true) return null;
+  if (
+    !sessionId
+    || !session
+    || session.headless === true
+    || isClaudeBashCodexWorkerSession(session)
+  ) return null;
   const agentId = nullableText(session.agentId, 96);
   if (!agentId) return null;
 
@@ -128,6 +134,10 @@ function createManualSessionRetentionStore(options = {}) {
     if (!parsed || parsed.version !== FILE_VERSION || !Array.isArray(parsed.sessions)) return;
     let pruned = false;
     for (const item of parsed.sessions) {
+      if (isClaudeBashCodexWorkerSession(item)) {
+        pruned = true;
+        continue;
+      }
       const clean = sanitizeSession(item && item.id, item);
       if (!clean) continue;
       if (!hasRecoverableClaudeEvidence(clean, item, { useCache: false })) {

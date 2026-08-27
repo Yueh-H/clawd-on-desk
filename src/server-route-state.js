@@ -42,6 +42,7 @@ const { CODEX_QUOTA_FIELDS } = require("../hooks/codex-rate-limits");
 const { extractPermissionToolInput } = require("../hooks/kimi-hook");
 const { normalizeCodexUserInputWire } = require("../hooks/codex-user-input");
 const { sanitizeShadowRecord } = require("./windows-process-chain-shadow-log");
+const { isClaudeBashCodexWorkerSession } = require("./codex-background-worker");
 
 // /state POST body size cap. Raised 1024 → 4096 → 16384: a CJK
 // assistant_last_output (3 UTF-8 bytes/char) on a Stop completion blew past
@@ -300,7 +301,7 @@ function handleStatePost(req, res, options) {
       const wslDistro = typeof data.wsl_distro === "string" && data.wsl_distro.trim()
         ? data.wsl_distro.trim()
         : null;
-      const headless = data.headless === true;
+      const reportedHeadless = data.headless === true;
       const platform = typeof data.platform === "string" && data.platform.trim()
         ? data.platform.trim()
         : null;
@@ -355,6 +356,13 @@ function handleStatePost(req, res, options) {
       // "ignore + fall back" pattern used by cwd / agent_id above.
       const rawTitle = typeof data.session_title === "string" ? data.session_title.trim() : "";
       const sessionTitle = rawTitle || null;
+      const headless = reportedHeadless || isClaudeBashCodexWorkerSession({
+        agentId,
+        cwd,
+        host,
+        codexOriginator,
+        codexSource,
+      });
       const contextUsage = normalizeContextUsage(data.context_usage);
       const antigravityQuota = normalizeAntigravityQuota(data.antigravity_quota);
       const claudeQuota = normalizeClaudeQuota(data.claude_quota);
