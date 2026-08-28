@@ -301,6 +301,17 @@ describe("normalizeShortcuts", () => {
     );
   });
 
+  it("preserves an explicit Control token when it is equivalent to the default off macOS", () => {
+    assert.strictEqual(
+      normalizeShortcuts(
+        { togglePet: "Control+Shift+Alt+C" },
+        getDefaultShortcuts(),
+        { isMac: false }
+      ).togglePet,
+      "Control+Shift+Alt+C"
+    );
+  });
+
   it("fills missing keys from defaults and drops unknown keys", () => {
     assert.deepStrictEqual(
       normalizeShortcuts({ togglePet: "Ctrl+K", bogus: "Ctrl+J" }, getDefaultShortcuts()),

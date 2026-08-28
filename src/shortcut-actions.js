@@ -256,7 +256,7 @@
 
     for (const actionId of SHORTCUT_ACTION_IDS) {
       if (acceleratorsConflict(normalized[actionId], defaults[actionId], platformOptions)) {
-        out[actionId] = defaults[actionId];
+        out[actionId] = normalized[actionId];
         markTaken(out[actionId]);
       }
     }
