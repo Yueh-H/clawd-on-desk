@@ -613,7 +613,13 @@
       tone = shortcutFeedback.tone;
     }
 
-    const isDefault = item.accelerator === item.defaultAccelerator;
+    const isDefault = shortcutActions.acceleratorsConflict
+      ? shortcutActions.acceleratorsConflict(
+        item.accelerator,
+        item.defaultAccelerator,
+        { isMac: isMac() }
+      )
+      : item.accelerator === item.defaultAccelerator;
     return el("div", {
       class: "sc-row editable" + (isRecording ? " recording" : ""),
       "data-shortcut-action-id": actionId,

@@ -93,6 +93,17 @@ describe("dangerous accelerator blacklist", () => {
     assert.ok(isDangerousAccelerator("Alt+F4"));
     assert.strictEqual(isDangerousAccelerator("CommandOrControl+Shift+Y"), false);
   });
+
+  it("folds equivalent Control tokens before checking non-macOS shortcuts", () => {
+    assert.strictEqual(
+      isDangerousAccelerator("CommandOrControl+Control+C", { isMac: false }),
+      true
+    );
+    assert.strictEqual(
+      isDangerousAccelerator("CommandOrControl+Control+C", { isMac: true }),
+      false
+    );
+  });
 });
 
 describe("accelerator conflict equivalence", () => {
@@ -191,6 +202,10 @@ describe("buildAcceleratorFromEvent", () => {
       formatAcceleratorPartial(["Control", "Shift"], { isMac: true }),
       "⌃⇧…"
     );
+    assert.strictEqual(
+      formatAcceleratorPartial(["CommandOrControl", "Control", "Shift"], { isMac: false }),
+      "Ctrl+Shift+…"
+    );
   });
 
   it("builds canonical accelerators from keyboard state", () => {
@@ -240,6 +255,10 @@ describe("formatAcceleratorLabel", () => {
       formatAcceleratorLabel("CommandOrControl+Shift+Alt+C"),
       "Ctrl+Shift+Alt+C"
     );
+    assert.strictEqual(
+      formatAcceleratorLabel("CommandOrControl+Control+K", { isMac: false }),
+      "Ctrl+K"
+    );
     assert.strictEqual(formatAcceleratorLabel(null), "— unassigned —");
   });
 
@@ -260,9 +279,24 @@ describe("formatAcceleratorLabel", () => {
 });
 
 describe("normalizeShortcuts", () => {
-  it("preserves an explicit native Control binding", () => {
+  it("preserves an explicit native Control binding on macOS", () => {
     assert.strictEqual(
-      normalizeShortcuts({ togglePet: "Control+Shift+K" }, getDefaultShortcuts()).togglePet,
+      normalizeShortcuts(
+        { togglePet: "Control+Shift+K" },
+        getDefaultShortcuts(),
+        { isMac: true }
+      ).togglePet,
+      "Control+Shift+K"
+    );
+  });
+
+  it("preserves the explicit token while comparing it by platform semantics", () => {
+    assert.strictEqual(
+      normalizeShortcuts(
+        { togglePet: "Control+Shift+K" },
+        getDefaultShortcuts(),
+        { isMac: false }
+      ).togglePet,
       "Control+Shift+K"
     );
   });
@@ -304,6 +338,15 @@ describe("normalizeShortcuts", () => {
     );
   });
 
+  it("rejects dangerous shortcuts after non-macOS modifier folding", () => {
+    assert.deepStrictEqual(
+      normalizeShortcuts({
+        togglePet: "CommandOrControl+Control+C",
+      }, getDefaultShortcuts(), { isMac: false }),
+      getDefaultShortcuts()
+    );
+  });
+
   it("uses default-priority de-duplication on load", () => {
     assert.deepStrictEqual(
       normalizeShortcuts({
@@ -314,6 +357,34 @@ describe("normalizeShortcuts", () => {
       {
         togglePet: "CommandOrControl+K",
         permissionAllow: "CommandOrControl+Shift+Y",
+        permissionDeny: "CommandOrControl+Shift+N",
+      }
+    );
+  });
+
+  it("de-duplicates physically equivalent Control bindings off macOS", () => {
+    assert.deepStrictEqual(
+      normalizeShortcuts({
+        togglePet: "Control+Shift+K",
+        permissionAllow: "CommandOrControl+Shift+K",
+      }, getDefaultShortcuts(), { isMac: false }),
+      {
+        togglePet: "Control+Shift+K",
+        permissionAllow: "CommandOrControl+Shift+Y",
+        permissionDeny: "CommandOrControl+Shift+N",
+      }
+    );
+  });
+
+  it("keeps the same Control bindings distinct on macOS", () => {
+    assert.deepStrictEqual(
+      normalizeShortcuts({
+        togglePet: "Control+Shift+K",
+        permissionAllow: "CommandOrControl+Shift+K",
+      }, getDefaultShortcuts(), { isMac: true }),
+      {
+        togglePet: "Control+Shift+K",
+        permissionAllow: "CommandOrControl+Shift+K",
         permissionDeny: "CommandOrControl+Shift+N",
       }
     );

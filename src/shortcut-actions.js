@@ -162,16 +162,30 @@
     };
   }
 
-  function isDangerousAccelerator(accelerator) {
-    return DANGEROUS_ACCELERATORS.has(accelerator);
+  function resolveIsMac(options) {
+    if (options && typeof options.isMac === "boolean") return options.isMac;
+    return typeof process !== "undefined" && process.platform === "darwin";
   }
 
-  function acceleratorConflictKey(accelerator, { isMac = false } = {}) {
+  function normalizeModifiersForPlatform(modifiers, { isMac = false } = {}) {
+    const normalized = [];
+    const seen = new Set();
+    for (const modifier of modifiers) {
+      const platformModifier = !isMac && modifier === "Control"
+        ? "CommandOrControl"
+        : modifier;
+      if (seen.has(platformModifier)) continue;
+      seen.add(platformModifier);
+      normalized.push(platformModifier);
+    }
+    return normalized;
+  }
+
+  function acceleratorConflictKey(accelerator, options) {
     const parsed = parseAccelerator(accelerator);
     if (!parsed) return null;
-    const modifiers = new Set(parsed.modifiers.map((modifier) => (
-      !isMac && modifier === "Control" ? "CommandOrControl" : modifier
-    )));
+    const isMac = resolveIsMac(options);
+    const modifiers = new Set(normalizeModifiersForPlatform(parsed.modifiers, { isMac }));
     const orderedModifiers = MODIFIER_ORDER.filter((modifier) => modifiers.has(modifier));
     return [...orderedModifiers, parsed.key].join("+");
   }
@@ -180,6 +194,11 @@
     const leftKey = acceleratorConflictKey(left, options);
     const rightKey = acceleratorConflictKey(right, options);
     return leftKey !== null && rightKey !== null && leftKey === rightKey;
+  }
+
+  function isDangerousAccelerator(accelerator, options) {
+    const platformKey = acceleratorConflictKey(accelerator, options);
+    return platformKey !== null && DANGEROUS_ACCELERATORS.has(platformKey);
   }
 
   function buildShortcutDefaults(defaultsValue) {
@@ -195,16 +214,18 @@
     return out;
   }
 
-  function normalizeShortcutValue(value, defaultAccelerator) {
+  function normalizeShortcutValue(value, defaultAccelerator, options) {
     if (value === "" || value === null || value === undefined) return null;
     if (typeof value !== "string") return defaultAccelerator;
     const parsed = parseAccelerator(value);
     if (!parsed) return defaultAccelerator;
-    if (isDangerousAccelerator(parsed.accelerator)) return defaultAccelerator;
+    if (isDangerousAccelerator(parsed.accelerator, options)) return defaultAccelerator;
     return parsed.accelerator;
   }
 
-  function normalizeShortcuts(value, defaultsValue) {
+  function normalizeShortcuts(value, defaultsValue, options) {
+    const isMac = resolveIsMac(options);
+    const platformOptions = { isMac };
     const defaults = buildShortcutDefaults(defaultsValue);
     const raw = isPlainObject(value) ? value : {};
     const normalized = {};
@@ -214,16 +235,29 @@
         normalized[actionId] = defaults[actionId];
         continue;
       }
-      normalized[actionId] = normalizeShortcutValue(raw[actionId], defaults[actionId]);
+      normalized[actionId] = normalizeShortcutValue(
+        raw[actionId],
+        defaults[actionId],
+        platformOptions
+      );
     }
 
     const out = {};
     const taken = new Set();
+    const conflictKey = (accelerator) => acceleratorConflictKey(accelerator, platformOptions);
+    const isTaken = (accelerator) => {
+      const key = conflictKey(accelerator);
+      return key !== null && taken.has(key);
+    };
+    const markTaken = (accelerator) => {
+      const key = conflictKey(accelerator);
+      if (key !== null) taken.add(key);
+    };
 
     for (const actionId of SHORTCUT_ACTION_IDS) {
-      if (normalized[actionId] === defaults[actionId]) {
+      if (acceleratorsConflict(normalized[actionId], defaults[actionId], platformOptions)) {
         out[actionId] = defaults[actionId];
-        if (out[actionId] !== null) taken.add(out[actionId]);
+        markTaken(out[actionId]);
       }
     }
 
@@ -234,18 +268,18 @@
         out[actionId] = null;
         continue;
       }
-      if (taken.has(candidate)) {
+      if (isTaken(candidate)) {
         const fallback = defaults[actionId];
-        if (fallback !== null && !taken.has(fallback)) {
+        if (fallback !== null && !isTaken(fallback)) {
           out[actionId] = fallback;
-          taken.add(fallback);
+          markTaken(fallback);
         } else {
           out[actionId] = null;
         }
         continue;
       }
       out[actionId] = candidate;
-      taken.add(candidate);
+      markTaken(candidate);
     }
 
     return out;
@@ -330,7 +364,8 @@
 
   function formatAcceleratorPartial(modifiers, { isMac = false } = {}) {
     if (!Array.isArray(modifiers) || modifiers.length === 0) return "";
-    const labels = modifiers.map((modifier) => {
+    const displayModifiers = normalizeModifiersForPlatform(modifiers, { isMac });
+    const labels = displayModifiers.map((modifier) => {
       if (modifier === "CommandOrControl") return isMac ? "⌘" : "Ctrl";
       if (modifier === "Control") return isMac ? "⌃" : "Ctrl";
       if (modifier === "Shift") return isMac ? "⇧" : "Shift";
@@ -348,7 +383,8 @@
     const parsed = parseAccelerator(accelerator);
     if (!parsed) return accelerator;
 
-    const displayParts = parsed.modifiers.map((modifier) => {
+    const displayModifiers = normalizeModifiersForPlatform(parsed.modifiers, { isMac });
+    const displayParts = displayModifiers.map((modifier) => {
       if (modifier === "CommandOrControl") return isMac ? "⌘" : "Ctrl";
       if (modifier === "Control") return isMac ? "⌃" : "Ctrl";
       if (modifier === "Shift") return isMac ? "⇧" : "Shift";

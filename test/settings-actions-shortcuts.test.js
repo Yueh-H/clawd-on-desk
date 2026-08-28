@@ -127,3 +127,58 @@ test("settings shortcut actions treat Control and CommandOrControl as equivalent
   assert.deepStrictEqual(calls.register, []);
   assert.deepStrictEqual(calls.unregister, []);
 });
+
+test("settings shortcut actions reject dangerous accelerators after non-macOS folding", () => {
+  const { deps, calls } = makeDeps({ platform: "linux" });
+
+  const result = shortcutCommands.registerShortcut({
+    actionId: "togglePet",
+    accelerator: "CommandOrControl+Control+C",
+  }, deps);
+
+  assert.strictEqual(result.status, "error");
+  assert.match(result.message, /reserved accelerator/);
+  assert.deepStrictEqual(calls.register, []);
+  assert.deepStrictEqual(calls.unregister, []);
+});
+
+test("settings shortcut actions preserve combined Command and Control on macOS", () => {
+  const snapshot = prefs.validate({
+    shortcuts: {
+      permissionAllow: null,
+    },
+  });
+  const { deps } = makeDeps({ snapshot, platform: "darwin" });
+
+  const result = shortcutCommands.registerShortcut({
+    actionId: "permissionAllow",
+    accelerator: "CommandOrControl+Control+C",
+  }, deps);
+
+  assert.strictEqual(result.status, "ok");
+  assert.strictEqual(
+    result.commit.shortcuts.permissionAllow,
+    "CommandOrControl+Control+C"
+  );
+});
+
+test("settings shortcut actions treat an alias-only non-macOS rebind as a no-op", () => {
+  const snapshot = prefs.getDefaults();
+  snapshot.shortcuts.togglePet = "Control+Shift+K";
+  const { deps, calls, registered } = makeDeps({
+    snapshot,
+    platform: "win32",
+    registered: [snapshot.shortcuts.togglePet],
+  });
+
+  const result = shortcutCommands.registerShortcut({
+    actionId: "togglePet",
+    accelerator: "CommandOrControl+Shift+K",
+  }, deps);
+
+  assert.strictEqual(result.status, "ok");
+  assert.strictEqual(result.noop, true);
+  assert.deepStrictEqual(calls.register, []);
+  assert.deepStrictEqual(calls.unregister, []);
+  assert.deepStrictEqual([...registered], ["Control+Shift+K"]);
+});
