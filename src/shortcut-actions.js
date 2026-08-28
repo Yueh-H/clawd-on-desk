@@ -37,7 +37,7 @@
     command: "CommandOrControl",
     cmd: "CommandOrControl",
     // Keep the established shorthand portable while allowing Electron's
-    // explicit Control modifier to represent the physical ⌃ key on macOS.
+    // explicit Control modifier to represent the native ⌃ key on macOS.
     ctrl: "CommandOrControl",
     control: "Control",
     shift: "Shift",
@@ -164,6 +164,22 @@
 
   function isDangerousAccelerator(accelerator) {
     return DANGEROUS_ACCELERATORS.has(accelerator);
+  }
+
+  function acceleratorConflictKey(accelerator, { isMac = false } = {}) {
+    const parsed = parseAccelerator(accelerator);
+    if (!parsed) return null;
+    const modifiers = new Set(parsed.modifiers.map((modifier) => (
+      !isMac && modifier === "Control" ? "CommandOrControl" : modifier
+    )));
+    const orderedModifiers = MODIFIER_ORDER.filter((modifier) => modifiers.has(modifier));
+    return [...orderedModifiers, parsed.key].join("+");
+  }
+
+  function acceleratorsConflict(left, right, options) {
+    const leftKey = acceleratorConflictKey(left, options);
+    const rightKey = acceleratorConflictKey(right, options);
+    return leftKey !== null && rightKey !== null && leftKey === rightKey;
   }
 
   function buildShortcutDefaults(defaultsValue) {
@@ -382,6 +398,8 @@
     formatAcceleratorPartial,
     normalizeShortcuts,
     isDangerousAccelerator,
+    acceleratorConflictKey,
+    acceleratorsConflict,
     validateShortcutMapShape,
   };
 });

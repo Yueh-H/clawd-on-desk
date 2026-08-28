@@ -14,6 +14,7 @@ const {
   formatAcceleratorLabel,
   normalizeShortcuts,
   isDangerousAccelerator,
+  acceleratorsConflict,
   validateShortcutMapShape,
 } = require("../src/shortcut-actions");
 
@@ -91,6 +92,22 @@ describe("dangerous accelerator blacklist", () => {
     assert.ok(isDangerousAccelerator("Control+S"));
     assert.ok(isDangerousAccelerator("Alt+F4"));
     assert.strictEqual(isDangerousAccelerator("CommandOrControl+Shift+Y"), false);
+  });
+});
+
+describe("accelerator conflict equivalence", () => {
+  it("keeps native Control distinct from Command on macOS", () => {
+    assert.strictEqual(
+      acceleratorsConflict("Control+Shift+K", "CommandOrControl+Shift+K", { isMac: true }),
+      false
+    );
+  });
+
+  it("treats Control and CommandOrControl as the same key off macOS", () => {
+    assert.strictEqual(
+      acceleratorsConflict("Control+Shift+K", "CommandOrControl+Shift+K", { isMac: false }),
+      true
+    );
   });
 });
 
@@ -243,7 +260,7 @@ describe("formatAcceleratorLabel", () => {
 });
 
 describe("normalizeShortcuts", () => {
-  it("preserves an explicit physical Control binding", () => {
+  it("preserves an explicit native Control binding", () => {
     assert.strictEqual(
       normalizeShortcuts({ togglePet: "Control+Shift+K" }, getDefaultShortcuts()).togglePet,
       "Control+Shift+K"

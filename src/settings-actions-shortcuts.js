@@ -6,6 +6,7 @@ const {
   getDefaultShortcuts,
   parseAccelerator,
   isDangerousAccelerator,
+  acceleratorsConflict,
 } = require("./shortcut-actions");
 
 function getShortcutSnapshot(snapshot) {
@@ -86,9 +87,12 @@ function validateShortcutBinding(actionId, accelerator, deps) {
   }
 
   const shortcuts = getShortcutSnapshot(deps && deps.snapshot);
+  const platform = deps && typeof deps.platform === "string" ? deps.platform : process.platform;
   for (const otherActionId of SHORTCUT_ACTION_IDS) {
     if (otherActionId === actionId) continue;
-    if (shortcuts[otherActionId] === parsed.accelerator) {
+    if (acceleratorsConflict(shortcuts[otherActionId], parsed.accelerator, {
+      isMac: platform === "darwin",
+    })) {
       return {
         status: "error",
         message: `conflict: already bound to ${otherActionId}`,
